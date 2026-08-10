@@ -256,3 +256,6 @@ impl DocumentSpec {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test;

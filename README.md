@@ -1,6 +1,6 @@
 # TinyDocs
 
-Agent-friendly document synthesis and text extraction in Rust.
+Agent-friendly document synthesis in Rust: `.docx` and `.pptx`.
 
 `tinydocs` turns a typed, validated document spec into real office-format
 bytes. It is built for hosts that let a language model produce documents: the
@@ -50,6 +50,12 @@ let bytes = tokio::time::timeout(
 Every limit is a public constant, so a host can quote the exact number in its
 own tool description and stay in lockstep with what validation enforces.
 
+Each format's limits live in its own module, because the same name means a
+different thing in each — `spec::document::MAX_TEXT_CHARS` bounds a heading,
+`spec::presentation::MAX_TEXT_CHARS` bounds a bullet.
+
+`spec::document` (`.docx`):
+
 | Limit | Value | Bounds |
 | --- | --- | --- |
 | `MAX_SECTIONS` | 128 | sections per document |
@@ -59,14 +65,32 @@ own tool description and stay in lockstep with what validation enforces.
 | `MAX_BULLETS_PER_SECTION` | 200 | bullets per section |
 | `MAX_TOTAL_CHARS` | 2,000,000 | all text in the document |
 
+`spec::presentation` (`.pptx`):
+
+| Limit | Value | Bounds |
+| --- | --- | --- |
+| `MAX_SLIDES` | 64 | content slides per deck |
+| `MAX_TEXT_CHARS` | 2,000 | any single text field |
+| `MAX_BULLETS_PER_SLIDE` | 32 | bullets per slide |
+| `MAX_IMAGES_PER_SLIDE` | 6 | images per slide |
+| `MAX_IMAGES_PER_DECK` | 8 | images across the deck |
+| `MAX_IMAGE_BYTES` | 5 MiB | one embedded image |
+
 The aggregate cap is the load-bearing one. The per-field limits bound each
 individual piece but not their product — `MAX_SECTIONS ×
 MAX_PARAGRAPHS_PER_SECTION × MAX_PARAGRAPH_CHARS` alone is over 500M
 characters, so a spec satisfying every other limit could still build a
 multi-hundred-megabyte document in memory.
 
-`DocumentSpec::validate` is public and runs before any synthesis, so a host can
-reject a bad tool call at its own boundary without paying for a blocking hop.
+`DocumentSpec::validate` and `PresentationSpec::validate` are public and run
+before any synthesis, so a host can reject a bad tool call at its own boundary
+without paying for a blocking hop.
+
+A presentation carries its images as bytes, not as paths or identifiers:
+resolving indirection is host policy — which directories an agent may read,
+whether an identifier belongs to the caller — and this crate has no business
+holding it. `SlideImage::from_bytes` does the mechanical half, identifying the
+format and reading the dimensions, and needs no writer to do it.
 
 ## The spec is separable from the codec
 
@@ -127,9 +151,14 @@ TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
 
 ## Feature flags
 
-| Feature | Default | Gates |
-| --- | --- | --- |
-| `docx` | on | `.docx` synthesis via `docx-rs` |
+Each format is a separate gate, and every gate is on by default. Turning one off
+drops its writer and that writer's dependencies; `tinydocs::spec` stays either
+way, so the contract and its validation survive any combination.
+
+| Feature | Default | Gates | Also drops |
+| --- | --- | --- | --- |
+| `docx` | on | `.docx` synthesis via `docx-rs` | `quick-xml` |
+| `pptx` | on | `.pptx` synthesis via `ppt-rs` | `syntect`, `pulldown-cmark`, `xml-rs` |
 
 ## Layout
 
@@ -141,10 +170,14 @@ src/
 │   └── test.rs
 ├── spec/               # wire contracts — ungated, serde only
 │   ├── mod.rs          # re-export surface
-│   ├── document.rs     # `DocumentSpec`, `DocumentSection`, limits, `validate`
-│   └── test.rs
+│   ├── document/       # `DocumentSpec`, `DocumentSection`, limits, `validate`
+│   ├── presentation/   # `PresentationSpec`, `SlideSpec`, `SlideImage`, limits
+│   └── image/          # `ImageFormat` — PNG/JPEG sniffing + header measurement
 ├── docx/
-    ├── mod.rs          # `generate` — the OOXML mapping
+│   ├── mod.rs          # `generate` — the `WordprocessingML` mapping
+│   └── test.rs
+├── pptx/
+    ├── mod.rs          # `generate` — the `PresentationML` mapping + image layout
     └── test.rs
 tests/
 └── public_api.rs       # integration tests against the public API only

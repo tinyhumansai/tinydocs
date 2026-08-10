@@ -35,6 +35,14 @@
     not(feature = "docx"),
     doc = "- `docx` (disabled in this build) — `.docx` (OOXML `WordprocessingML`) synthesis."
 )]
+#![cfg_attr(
+    feature = "pptx",
+    doc = "- [`pptx`] — `.pptx` (OOXML `PresentationML`) synthesis."
+)]
+#![cfg_attr(
+    not(feature = "pptx"),
+    doc = "- `pptx` (disabled in this build) — `.pptx` (OOXML `PresentationML`) synthesis."
+)]
 //!
 //! # Example
 //!
@@ -60,8 +68,13 @@
 //!
 //! # Feature flags
 //!
-//! - `docx` (default) — `.docx` synthesis via `docx-rs`. Turning it off drops
-//!   the whole OOXML writer stack.
+//! Each format is a separate gate, and every gate is on by default. Turning one
+//! off drops its writer and that writer's dependencies; the specs stay, so the
+//! contract and its validation survive any combination.
+//!
+//! - `docx` (default) — `.docx` synthesis via `docx-rs`.
+//! - `pptx` (default) — `.pptx` synthesis via `ppt-rs`, which also drops
+//!   `syntect` and `pulldown-cmark`.
 
 mod error;
 
@@ -69,5 +82,8 @@ pub mod spec;
 
 #[cfg(feature = "docx")]
 pub mod docx;
+
+#[cfg(feature = "pptx")]
+pub mod pptx;
 
 pub use error::{Error, Result};

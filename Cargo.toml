@@ -38,6 +38,11 @@ serde = { version = "1", features = ["derive"] }
 # OOXML `.docx` synthesis. Optional: exclusive to the `docx` feature so a host
 # that only needs extraction does not pull the writer stack.
 docx-rs = { version = "0.4.20", optional = true }
+# OOXML `.pptx` synthesis. Optional: exclusive to the `pptx` feature. It brings
+# its own zip/XML stack plus `syntect` and `pulldown-cmark` for a Markdown
+# front-end this crate does not use, which is precisely why it is gated — a host
+# that only generates documents should not carry a syntax highlighter.
+ppt-rs = { version = "0.2.14", optional = true }
 
 [dev-dependencies]
 # `.docx` output is a zip container; the tests re-open the produced bytes and
@@ -55,9 +60,11 @@ name = "basic"
 required-features = ["docx"]
 
 [features]
-default = ["docx"]
+default = ["docx", "pptx"]
 # `.docx` generation via `docx-rs`.
 docx = ["dep:docx-rs"]
+# `.pptx` generation via `ppt-rs`.
+pptx = ["dep:ppt-rs"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with
 # `-D warnings`, so anything set to "warn" here fails the build in CI.
