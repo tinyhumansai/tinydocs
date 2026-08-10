@@ -78,6 +78,18 @@ impl DocumentSpec {
                 format!("must be ≤ {MAX_TEXT_CHARS} chars"),
             ));
         }
+        // Running total across every renderable field — title, author, and all
+        // section contents — checked as each field is processed. A spec can pass
+        // every per-field limit yet blow the aggregate budget, and checking
+        // incrementally rejects it as soon as the budget is crossed without a
+        // second pass over the whole spec.
+        let over_budget = || {
+            Error::invalid_input(
+                "sections",
+                format!("total document text must be ≤ {MAX_TOTAL_CHARS} chars"),
+            )
+        };
+        let mut total = self.title.chars().count();
         if let Some(author) = self.author.as_deref() {
             if author.chars().count() > MAX_TEXT_CHARS {
                 return Err(Error::invalid_input(
@@ -85,6 +97,7 @@ impl DocumentSpec {
                     format!("must be ≤ {MAX_TEXT_CHARS} chars"),
                 ));
             }
+            total = total.saturating_add(author.chars().count());
         }
         if self.sections.is_empty() {
             return Err(Error::invalid_input(
@@ -113,6 +126,10 @@ impl DocumentSpec {
                         format!("must be ≤ {MAX_TEXT_CHARS} chars"),
                     ));
                 }
+                total = total.saturating_add(heading.chars().count());
+                if total > MAX_TOTAL_CHARS {
+                    return Err(over_budget());
+                }
             }
             if section.paragraphs.len() > MAX_PARAGRAPHS_PER_SECTION {
                 return Err(Error::invalid_input(
@@ -126,6 +143,10 @@ impl DocumentSpec {
                         format!("sections[{i}].paragraphs[{p}]"),
                         format!("must be ≤ {MAX_PARAGRAPH_CHARS} chars"),
                     ));
+                }
+                total = total.saturating_add(paragraph.chars().count());
+                if total > MAX_TOTAL_CHARS {
+                    return Err(over_budget());
                 }
             }
             if section.bullets.len() > MAX_BULLETS_PER_SECTION {
@@ -141,14 +162,11 @@ impl DocumentSpec {
                         format!("must be ≤ {MAX_PARAGRAPH_CHARS} chars"),
                     ));
                 }
+                total = total.saturating_add(bullet.chars().count());
+                if total > MAX_TOTAL_CHARS {
+                    return Err(over_budget());
+                }
             }
-        }
-
-        if self.total_chars() > MAX_TOTAL_CHARS {
-            return Err(Error::invalid_input(
-                "sections",
-                format!("total document text must be ≤ {MAX_TOTAL_CHARS} chars"),
-            ));
         }
         Ok(())
     }
