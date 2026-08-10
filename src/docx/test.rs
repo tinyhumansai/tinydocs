@@ -286,6 +286,28 @@ fn generate_drops_blank_paragraphs_and_bullets() {
     assert!(body.contains("real"));
     assert!(body.contains("item"));
     assert!(body.contains("Kept"));
+
+    // Presence alone would still pass if the blank-filtering guards in `build`
+    // regressed and started emitting empty/whitespace runs alongside the kept
+    // ones. Pin the exact paragraph count too: title, heading, one kept
+    // paragraph, one kept bullet — no run for the blank author, the two blank
+    // paragraphs, or the whitespace-only bullet.
+    assert_eq!(
+        body.matches("<w:p ").count(),
+        4,
+        "blank author/paragraphs/bullet must not emit paragraphs: {body}"
+    );
+    assert_eq!(
+        body.matches("<w:t ").count(),
+        4,
+        "blank author/paragraphs/bullet must not emit text runs: {body}"
+    );
+    for dropped in ["\t\n", "   "] {
+        assert!(
+            !body.contains(dropped),
+            "dropped whitespace-only content {dropped:?} leaked into document.xml"
+        );
+    }
 }
 
 #[test]
