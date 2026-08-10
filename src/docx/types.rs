@@ -37,8 +37,9 @@ pub const MAX_PARAGRAPHS_PER_SECTION: usize = 200;
 /// Maximum number of bullet-list items in a single section.
 pub const MAX_BULLETS_PER_SECTION: usize = 200;
 
-/// Aggregate cap on the total body text across the whole document, in Unicode
-/// scalar values.
+/// Aggregate cap on all renderable text across the whole document — the
+/// title, the author byline, and every section's heading, paragraphs, and
+/// bullets — in Unicode scalar values.
 ///
 /// The per-field and per-section limits above bound each individual piece, but
 /// not their product — `MAX_SECTIONS × MAX_PARAGRAPHS_PER_SECTION ×
