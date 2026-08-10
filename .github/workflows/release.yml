@@ -70,7 +70,7 @@ jobs:
           metadata="$(cargo metadata --format-version 1 --no-deps)"
           crate_name="tinydocs"
           current_version="$(jq -r '.packages[] | select(.name == "tinydocs") | .version' <<< "$metadata")"
-          tinybus_version="$([
+          tinybus_version="$(
             cargo metadata \
               --manifest-path vendor/tinybus/Cargo.toml \
               --format-version 1 \
