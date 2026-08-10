@@ -60,6 +60,12 @@ async fn setup(connection: Connection) -> BusResult<()> {
     Ok(())
 }
 
+// The SDK generates three public, revisioned C ABI symbols. Their contract is
+// documented by TinyBus rather than as Rust-callable API items in this crate.
+#[expect(
+    missing_docs,
+    reason = "generated TinyBus ABI symbols are documented by the module SDK"
+)]
 tinybus_module::module_export! {
     setup = setup,
     worker_threads = 2,

@@ -49,6 +49,27 @@ jobs:
       - name: Test default features
         run: cargo test
 
+  module-e2e:
+    name: TinyBus module E2E
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build the loadable module
+        run: cargo build --locked --release --features module
+
+      - name: Load the module and call GenerateDocx
+        env:
+          TINYDOCS_TEST_MODULE: ${{ github.workspace }}/target/release/libtinydocs.so
+        run: cargo test --locked --all-features --test module_e2e -- --ignored
+
   docs:
     name: Docs
     runs-on: ubuntu-latest

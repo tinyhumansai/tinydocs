@@ -68,11 +68,41 @@ multi-hundred-megabyte document in memory.
 `DocumentSpec::validate` is public and runs before any synthesis, so a host can
 reject a bad tool call at its own boundary without paying for a blocking hop.
 
+## TinyBus module
+
+The opt-in `module` feature builds TinyDocs as a trusted in-process TinyBus
+module while retaining the ordinary Rust library:
+
+```sh
+cargo build --release --features module
+```
+
+The native artifact is `target/release/libtinydocs.so` on Linux,
+`libtinydocs.dylib` on macOS, or `tinydocs.dll` on Windows. Load it with a
+TinyBus host built with its `modules` feature. It claims
+`ai.tinyhumans.tinydocs.Docx` at `/ai/tinyhumans/tinydocs/Docx` and exposes:
+
+```text
+GenerateDocx(DocumentSpec) -> Vec<u8>
+```
+
+The release workflow attaches a native module for Linux, macOS, and Windows to
+each GitHub release. TinyBus modules are target-specific and trusted: download
+the artifact matching the host, and install it only from a trusted release.
+
+Run the real loader test locally after building the release artifact:
+
+```sh
+TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs.so" \
+  cargo test --all-features --test module_e2e -- --ignored
+```
+
 ## Feature flags
 
 | Feature | Default | Gates |
 | --- | --- | --- |
 | `docx` | on | `.docx` synthesis via `docx-rs` |
+| `module` | off | TinyBus ABI, runtime, and loadable dynamic library |
 
 ## Layout
 
@@ -86,8 +116,12 @@ src/
     ├── mod.rs          # `generate` + spec validation
     ├── types.rs        # `DocumentSpec`, `DocumentSection`, limits
     └── test.rs
+├── bus/
+│   ├── mod.rs          # TinyBus service + module ABI exports
+│   └── test.rs
 tests/
-└── public_api.rs       # integration tests against the public API only
+├── public_api.rs       # integration tests against the public API only
+└── module_e2e.rs       # real TinyBus dynamic-loader test
 examples/
 └── basic.rs            # compiled and linted in CI
 ```

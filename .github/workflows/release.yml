@@ -25,6 +25,8 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     environment: Production
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -136,3 +138,69 @@ jobs:
         run: cargo publish --locked
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  build-modules:
+    name: Build module (${{ matrix.os }})
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            library: libtinydocs.so
+          - os: macos-latest
+            library: libtinydocs.dylib
+          - os: windows-latest
+            library: tinydocs.dll
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build loadable module
+        run: cargo build --locked --release --features module
+
+      - name: Name release asset
+        id: asset
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          SOURCE_LIBRARY: ${{ matrix.library }}
+        run: |
+          set -euo pipefail
+          host_target="$(rustc -vV | sed -n 's/^host: //p')"
+          extension="${SOURCE_LIBRARY##*.}"
+          asset="tinydocs-${RELEASE_TAG}-${host_target}.${extension}"
+          cp "target/release/${SOURCE_LIBRARY}" "$asset"
+          echo "path=${asset}" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tinydocs-module-${{ runner.os }}
+          path: ${{ steps.asset.outputs.path }}
+          if-no-files-found: error
+
+  github-release:
+    name: Upload module binaries
+    needs: [publish, build-modules]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: tinydocs-module-*
+          merge-multiple: true
+          path: release-assets
+
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          GH_REPO: ${{ github.repository }}
+        run: gh release create "$RELEASE_TAG" release-assets/* --verify-tag --generate-notes

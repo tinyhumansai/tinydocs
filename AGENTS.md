@@ -33,6 +33,7 @@ This is a Rust 2024 library crate rooted at `Cargo.toml`.
 src/
 ├── lib.rs              # crate docs + the entire public re-export surface
 ├── error/mod.rs        # crate-wide `Error` and `Result<T>`
+├── bus/                # optional TinyBus service and module ABI exports
 └── <feature>/          # one directory per feature area
     ├── mod.rs          # module docs, wiring, smallest useful public API
     ├── types.rs        # substantial type definitions
