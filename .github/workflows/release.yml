@@ -332,7 +332,7 @@ jobs:
           set -euo pipefail
           mapfile -t assets < <(
             find release-assets -type f \
-              \( -name 'tinydocs-module-*.tar.gz' -o -name 'tinydocs-module-*.zip' \) \
+              \( -name '*.tar.gz' -o -name '*.zip' \) \
               | sort
           )
           if [[ ${#assets[@]} -ne 11 ]]; then
