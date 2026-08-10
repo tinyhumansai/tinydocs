@@ -1,15 +1,15 @@
 [package]
-name = "rust-template"
+name = "tinydocs"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.85"
 license = "GPL-3.0-only"
-description = "A production-ready Rust library template."
-repository = "https://github.com/tinyhumansai/rust-template"
-documentation = "https://docs.rs/rust-template"
+description = "Agent-friendly document synthesis and text extraction (DOCX, PPTX, PDF) in Rust."
+repository = "https://github.com/tinyhumansai/tinydocs"
+documentation = "https://docs.rs/tinydocs"
 readme = "README.md"
-keywords = ["template"]
-categories = ["development-tools"]
+keywords = ["docx", "ooxml", "pdf", "document", "agent"]
+categories = ["text-processing"]
 # Keep the published package to what a consumer actually needs.
 exclude = [
     ".github/",
@@ -25,11 +25,33 @@ exclude = [
 # Derive macros for the crate-wide error type in `src/error/mod.rs`. Every
 # dependency entry should carry a comment like this one saying why it is here.
 thiserror = "2"
+# The document spec types are the wire contract a host exposes to an LLM as a
+# JSON tool schema, so they derive Serialize/Deserialize here rather than
+# forcing every host to re-declare them.
+serde = { version = "1", features = ["derive"] }
+# OOXML `.docx` synthesis. Optional: exclusive to the `docx` feature so a host
+# that only needs extraction does not pull the writer stack.
+docx-rs = { version = "0.4.20", optional = true }
 
 [dev-dependencies]
+# `.docx` output is a zip container; the tests re-open the produced bytes and
+# assert on the OOXML parts inside.
+zip = { version = "2", default-features = false, features = ["deflate"] }
+# The spec types are a JSON wire contract; the tests assert they round-trip and
+# that unknown keys are rejected.
+serde_json = "1"
+
+# The example generates a `.docx`, so it only builds when that gate is on.
+# Without this, `--no-default-features` fails on the example rather than
+# reporting the (correct) fact that the crate itself compiles fine.
+[[example]]
+name = "basic"
+required-features = ["docx"]
 
 [features]
-default = []
+default = ["docx"]
+# `.docx` generation via `docx-rs`.
+docx = ["dep:docx-rs"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with
 # `-D warnings`, so anything set to "warn" here fails the build in CI.

@@ -1,34 +1,53 @@
-//! A production-ready starting point for a Rust library.
+//! Agent-friendly document synthesis in Rust.
 //!
-//! This crate is a template. It ships the layout, lint configuration, error
-//! handling, testing, and documentation conventions described in `AGENTS.md`,
-//! plus one small feature module ([`greet`]) that demonstrates them end to end.
+//! `tinydocs` turns a typed, validated document spec into real office-format
+//! bytes. It is built for hosts that let a language model produce documents:
+//! the spec types are the JSON tool schema, validation rejects a malformed
+//! spec with a structured [`Error::InvalidInput`] naming the exact field so
+//! the model can self-correct, and synthesis returns a plain byte buffer.
+//!
+//! # What this crate deliberately does not do
+//!
+//! No filesystem access, no subprocesses, no async runtime, no deadline
+//! handling. [`docx::generate`] is synchronous and CPU-bound. A host that runs
+//! on an async executor owns the blocking-pool hop and the timeout, because
+//! only the host knows its own executor and deadline policy — and a crate that
+//! guessed at either would be wrong for every other host.
 //!
 //! # Layout
 //!
-//! - `src/error/` holds the crate-wide [`Error`] enum and the [`Result`] alias
-//!   returned by every fallible public function.
-//! - Each feature area lives in its own module directory with a `mod.rs`
-//!   module root, an optional `types.rs`, and a `test.rs` holding its unit
-//!   tests.
-//! - Every public item is re-exported from here, so downstream users have a
-//!   single predictable surface.
+//! - [`error`](self::Error) — the crate-wide [`Error`] and [`Result`].
+//! - [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis.
 //!
 //! # Example
 //!
 //! ```
-//! use rust_template::{greet, Error};
+//! use tinydocs::docx::{self, DocumentSection, DocumentSpec};
 //!
-//! assert_eq!(greet("Ferris")?, "Hello, Ferris!");
-//! assert_eq!(greet("   ").unwrap_err(), Error::EmptyName);
-//! # Ok::<(), rust_template::Error>(())
+//! let spec = DocumentSpec {
+//!     title: "Weekly Report".to_string(),
+//!     author: Some("Ferris".to_string()),
+//!     sections: vec![DocumentSection {
+//!         heading: Some("Highlights".to_string()),
+//!         paragraphs: vec!["Throughput doubled.".to_string()],
+//!         bullets: vec!["Shipped the parser".to_string()],
+//!     }],
+//! };
+//!
+//! let bytes = docx::generate(&spec)?;
+//! std::fs::write("report.docx", bytes)?;
+//! # std::fs::remove_file("report.docx")?;
+//! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
-//! Replace the `greeting` module with the first real feature area, keep the
-//! conventions, and update this documentation to describe the new crate.
+//! # Feature flags
+//!
+//! - `docx` (default) — `.docx` synthesis via `docx-rs`. Turning it off drops
+//!   the whole OOXML writer stack.
 
 mod error;
-mod greeting;
+
+#[cfg(feature = "docx")]
+pub mod docx;
 
 pub use error::{Error, Result};
-pub use greeting::greet;
