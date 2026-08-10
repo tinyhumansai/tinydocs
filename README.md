@@ -88,10 +88,16 @@ GenerateDocx(DocumentSpec) -> Vec<u8>
 
 The release workflow attaches installable Linux and macOS bundles containing
 the matching TinyBus host, the TinyDocs module, a SHA-256 `modules.toml`
-allowlist, and protocol/module documentation. It also attaches the published
-crate and pinned TinyBus source. TinyBus modules are target-specific and
-trusted: download the bundle matching the host, and install it only from a
-trusted release.
+allowlist, and protocol/module documentation. It also publishes
+`checksum.toml`, which TinyBus uses to verify a downloaded precompiled module
+archive, plus the crates.io package and pinned TinyBus source. TinyBus modules
+are target-specific and trusted: download the bundle matching the host, and
+install it only from a trusted release.
+
+A TinyBus host can download and verify the matching archive directly from a
+tagged GitHub release with `ModuleHost::load_github_release`; the archive must
+be selected by its exact target-specific asset name and the release URL must
+point to the tag, not a moving branch.
 
 Run the real loader test locally after building the release artifact:
 

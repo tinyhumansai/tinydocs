@@ -68,6 +68,8 @@ module itself retains no document state between calls.
 - CI executes that loader test on Linux.
 - A release uploads Linux and macOS bundles containing the matching TinyBus
   host, TinyDocs module, SHA-256 allowlist, and operational documentation.
+- A release uploads `checksum.toml` with the SHA-256 digest of every archive so
+  TinyBus can verify a precompiled module before extracting or loading it.
 - The release also uploads the crates.io package and pinned TinyBus source.
 
 ## Open questions

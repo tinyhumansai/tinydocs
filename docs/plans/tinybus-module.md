@@ -18,6 +18,8 @@ default library dependency graph.
 - [x] Run that real-loader test in CI.
 - [x] Build and upload installable Linux and macOS TinyBus bundles, source
   packages, module allowlists, and documentation during release.
+- [x] Publish a release-level `checksum.toml` so TinyBus can verify each
+  precompiled module archive before extraction.
 - [x] Document build, loading, trust, and payload constraints.
 
 ## Verification
