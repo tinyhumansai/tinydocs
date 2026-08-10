@@ -124,11 +124,34 @@ cargo build --release --package tinydocs-module
 The native artifact is `target/release/libtinydocs_module.so` on Linux,
 `libtinydocs_module.dylib` on macOS, or `tinydocs_module.dll` on Windows. Load
 it with a TinyBus host built with its `modules` feature. It claims
-`ai.tinyhumans.tinydocs.Docx` at `/ai/tinyhumans/tinydocs/Docx` and exposes:
+`ai.tinyhumans.tinydocs.Documents` at `/ai/tinyhumans/tinydocs/Documents` and
+exposes the three format operations plus the chunked transfer they depend on:
 
 ```text
-GenerateDocx(DocumentSpec) -> Vec<u8>
+BeginBlob(total_bytes, sha256)       -> blob_id
+PutChunk(blob_id, offset, base64)    -> bytes received so far
+GetChunk(blob_id, offset, len)       -> base64
+ReleaseBlob(blob_id)                 -> ()
+GenerateDocx(DocumentSpec)           -> BlobRef
+GeneratePptx(deck with image blobs)  -> BlobRef
+ExtractText(blob_id)                 -> BlobRef
 ```
+
+Nothing returns bytes inline. A TinyBus frame is a 16 MiB JSON document, and a
+`Vec<u8>` serialises as an array of integers — roughly 3.5 bytes of frame per
+byte of payload — so the real inline ceiling is a few megabytes. That is below a
+deck's legal image payload and below any `.pdf` worth extracting. So every
+unbounded value is staged and moved in base64 chunks, and a caller's code path is
+the same regardless of size.
+
+The staging area is bounded in four independent ways — per chunk, per blob, in
+total, and by blob count — and blobs that stop being touched expire. A module is
+trusted in-process code that TinyBus never unloads, so an abandoned upload is
+never reclaimed by a process exit that does not come.
+
+This interface replaces `ai.tinyhumans.tinydocs.Docx`, which returned bytes
+inline. TinyBus's guidance is that an existing interface must not change in
+place, so the new contract took a new name.
 
 The release workflow attaches installable Linux and macOS bundles containing
 the matching TinyBus host, the TinyDocs module, a SHA-256 `modules.toml`

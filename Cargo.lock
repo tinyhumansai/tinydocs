@@ -1649,6 +1649,11 @@ dependencies = [
 name = "tinydocs-module"
 version = "0.1.11"
 dependencies = [
+ "base64 0.22.1",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.20",
  "tinybus",
  "tinybus-module",
  "tinydocs",
