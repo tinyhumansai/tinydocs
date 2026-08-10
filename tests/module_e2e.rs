@@ -1,4 +1,4 @@
-//! End-to-end test for loading the built TinyDocs dynamic module into TinyBus.
+//! End-to-end test for loading the built `TinyDocs` dynamic module into `TinyBus`.
 
 #![cfg(feature = "module")]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
