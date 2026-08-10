@@ -314,7 +314,26 @@ jobs:
       - name: Download workflow artifacts
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --dir release-assets
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          mapfile -t artifact_ids < <(
+            gh api --paginate \
+              "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
+              --jq '.artifacts[] | select(.expired == false) | .id'
+          )
+          if [[ ${#artifact_ids[@]} -eq 0 ]]; then
+            echo "no unexpired workflow artifacts found" >&2
+            exit 1
+          fi
+          for artifact_id in "${artifact_ids[@]}"; do
+            archive="$(mktemp)"
+            gh api \
+              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
+              > "$archive"
+            unzip -q "$archive" -d release-assets
+            rm -f "$archive"
+          done
 
       - uses: actions/checkout@v7
         with:
