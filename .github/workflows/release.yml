@@ -312,30 +312,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download workflow artifacts
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          mkdir -p release-assets
-          mapfile -t module_artifacts < <(
-            gh api --paginate \
-              "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.expired == false and (.name | startswith("tinydocs-module-"))) | [.id, .name] | @tsv'
-          )
-          if [[ ${#module_artifacts[@]} -ne 11 ]]; then
-            printf 'expected 11 module artifacts, found %s:\n' "${#module_artifacts[@]}" >&2
-            printf '%s\n' "${module_artifacts[@]}" >&2
-            exit 1
-          fi
-          for artifact in "${module_artifacts[@]}"; do
-            IFS=$'\t' read -r artifact_id artifact_name <<< "$artifact"
-            archive="$(mktemp)"
-            gh api \
-              "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
-              > "$archive"
-            unzip -q "$archive" -d "release-assets/$artifact_name"
-            rm -f "$archive"
-          done
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tinydocs-module-*
+          path: release-assets
+          merge-multiple: true
 
       - uses: actions/checkout@v7
         with:
@@ -350,14 +331,10 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          mapfile -t assets < <(
-            find release-assets -type f \
-              \( -name 'tinydocs-module-*.tar.gz' -o -name 'tinydocs-module-*.zip' \) \
-              | sort
-          )
+          assets=(release-assets/*.tar.gz release-assets/*.zip)
           if [[ ${#assets[@]} -ne 11 ]]; then
-            printf 'expected 11 module archives, found %s; extracted files:\n' "${#assets[@]}" >&2
-            find release-assets -type f -print >&2
+            printf 'expected 11 module archives, found %s:\n' "${#assets[@]}" >&2
+            find release-assets -type f -print >&2 || true
             exit 1
           fi
           checksum_args=()
