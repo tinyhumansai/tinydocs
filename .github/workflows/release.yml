@@ -180,14 +180,45 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
 
   native-bundles:
-    name: Native bundle (${{ matrix.os }})
+    name: Module bundle (${{ matrix.id }})
     needs: publish
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-latest
-          - macos-latest
+        include:
+          - id: ubuntu-22.04-x86_64
+            os: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+          - id: ubuntu-22.04-arm64
+            os: ubuntu-22.04-arm
+            target: aarch64-unknown-linux-gnu
+          - id: ubuntu-24.04-x86_64
+            os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+          - id: ubuntu-24.04-arm64
+            os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+          - id: macos-15-x86_64
+            os: macos-15-intel
+            target: x86_64-apple-darwin
+          - id: macos-15-arm64
+            os: macos-15
+            target: aarch64-apple-darwin
+          - id: macos-26-x86_64
+            os: macos-26-intel
+            target: x86_64-apple-darwin
+          - id: macos-26-arm64
+            os: macos-26
+            target: aarch64-apple-darwin
+          - id: windows-2022-x86_64
+            os: windows-2022
+            target: x86_64-pc-windows-msvc
+          - id: windows-2025-x86_64
+            os: windows-2025
+            target: x86_64-pc-windows-msvc
+          - id: windows-11-arm64
+            os: windows-11-arm
+            target: aarch64-pc-windows-msvc
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
@@ -199,60 +230,83 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: |
-            . -> target
-            vendor/tinybus -> target
 
-      - name: Build TinyBus host
-        working-directory: vendor/tinybus
-        run: cargo build --locked --release --package tinybus --all-features --bin tinybus
-
-      - name: Build TinyDocs module
-        run: cargo build --locked --release --package tinydocs-module
-
-      - name: Assemble native bundle
-        id: bundle
+      - name: Verify native Rust target
         shell: bash
         env:
-          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
-          TINYDOCS_VERSION: ${{ needs.publish.outputs.next_version }}
+          EXPECTED_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          actual_target="$(rustc -vV | sed -n 's/^host: //p')"
+          [[ "$actual_target" == "$EXPECTED_TARGET" ]]
+
+      - name: Build installable module
+        run: cargo build --locked --release --package tinydocs-module
+
+      - name: Assemble Unix module package
+        if: ${{ runner.os != 'Windows' }}
+        id: unix_package
+        shell: bash
+        env:
+          BUNDLE_ID: ${{ matrix.id }}
+          VERSION: ${{ needs.publish.outputs.next_version }}
         run: |
           set -euo pipefail
 
-          target_triple="$(rustc -vV | sed -n 's/^host: //p')"
-          bundle_name="tinydocs-${TINYDOCS_VERSION}-tinybus-${TINYBUS_VERSION}-${target_triple}"
-          bundle_root="dist/${bundle_name}"
-          module_root="${bundle_root}/modules"
-          mkdir -p "${bundle_root}/bin" "$module_root" "${bundle_root}/docs"
+          library_name="tinydocs_module"
+          case "$RUNNER_OS" in
+            Linux) module="target/release/lib${library_name}.so" ;;
+            macOS) module="target/release/lib${library_name}.dylib" ;;
+            *) echo "unsupported Unix runner: ${RUNNER_OS}" >&2; exit 1 ;;
+          esac
+          package_name="tinydocs-module-${VERSION}-${BUNDLE_ID}"
+          package_root="dist/${package_name}"
+          mkdir -p "$package_root"
+          install -m 755 "$module" "$package_root/"
+          install -m 644 LICENSE README.md docs/specs/tinybus-module.md "$package_root/"
+          module_name="$(basename "$module")"
+          module_hash="$(sha256sum "$package_root/$module_name" | awk '{print $1}')"
+          printf '"%s" = "%s"\n' "$module_name" "$module_hash" \
+            > "$package_root/modules.toml"
+          tar -C "$package_root" -czf "dist/${package_name}.tar.gz" .
+          echo "archive=dist/${package_name}.tar.gz" >> "$GITHUB_OUTPUT"
 
-          install -m 755 vendor/tinybus/target/release/tinybus "${bundle_root}/bin/tinybus"
+      - name: Assemble Windows module package
+        if: ${{ runner.os == 'Windows' }}
+        id: windows_package
+        shell: pwsh
+        env:
+          BUNDLE_ID: ${{ matrix.id }}
+          VERSION: ${{ needs.publish.outputs.next_version }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $libraryName = 'tinydocs_module'
+          $module = "target/release/$libraryName.dll"
+          $packageName = "tinydocs-module-$env:VERSION-$env:BUNDLE_ID"
+          $packageRoot = "dist/$packageName"
+          New-Item -ItemType Directory -Force $packageRoot | Out-Null
+          Copy-Item -LiteralPath $module, 'LICENSE', 'README.md' -Destination $packageRoot
+          $hash = (Get-FileHash -LiteralPath $module -Algorithm SHA256).Hash.ToLowerInvariant()
+          $moduleName = Split-Path -Leaf $module
+          "`"$moduleName`" = `"$hash`"`n" |
+            Set-Content -Path "$packageRoot/modules.toml" -Encoding utf8NoBOM
+          Compress-Archive -Path "$packageRoot/*" -DestinationPath "dist/$packageName.zip"
+          "archive=dist/$packageName.zip" >> $env:GITHUB_OUTPUT
 
-          module_artifact="$(find target/release -maxdepth 1 -type f \( -name 'libtinydocs_module.so' -o -name 'libtinydocs_module.dylib' \) -print -quit)"
-          if [[ -z "$module_artifact" || ! -f "$module_artifact" ]]; then
-            echo "the TinyDocs module artifact is missing" >&2
-            exit 1
-          fi
-          install -m 644 "$module_artifact" "$module_root/"
-
-          module_name="$(basename "$module_artifact")"
-          module_hash="$(shasum -a 256 "${module_root}/${module_name}" | awk '{print $1}')"
-          printf '"%s" = "%s"\n' "$module_name" "$module_hash" > "${module_root}/modules.toml"
-
-          install -m 644 LICENSE "${bundle_root}/LICENSE"
-          install -m 644 README.md "${bundle_root}/README.md"
-          install -m 644 docs/specs/tinybus-module.md "${bundle_root}/docs/tinydocs-module.md"
-          install -m 644 vendor/tinybus/docs/protocol.md "${bundle_root}/docs/tinybus-protocol.md"
-          cp -R vendor/tinybus/docs/modules "${bundle_root}/docs/tinybus-modules"
-
-          tar -C dist -czf "dist/${bundle_name}.tar.gz" "$bundle_name"
-          echo "archive=dist/${bundle_name}.tar.gz" >> "$GITHUB_OUTPUT"
-
-      - name: Upload native bundle
+      - name: Upload Unix module package
+        if: ${{ runner.os != 'Windows' }}
         uses: actions/upload-artifact@v4
         with:
-          name: tinydocs-${{ runner.os }}
-          path: ${{ steps.bundle.outputs.archive }}
+          name: tinydocs-module-${{ matrix.id }}
+          path: ${{ steps.unix_package.outputs.archive }}
+          if-no-files-found: error
+
+      - name: Upload Windows module package
+        if: ${{ runner.os == 'Windows' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinydocs-module-${{ matrix.id }}
+          path: ${{ steps.windows_package.outputs.archive }}
           if-no-files-found: error
 
   github-release:
@@ -268,6 +322,30 @@ jobs:
           path: release-assets
           merge-multiple: true
 
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Create release checksum manifest with TinyBus
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          assets=(release-assets/tinydocs-module-*.tar.gz release-assets/tinydocs-module-*.zip)
+          if [[ ${#assets[@]} -ne 11 ]]; then
+            echo "expected 11 module archives, found ${#assets[@]}" >&2
+            exit 1
+          fi
+          checksum_args=()
+          for asset in "${assets[@]}"; do checksum_args+=(--path "$asset"); done
+          cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
+            --package tinybus --all-features --bin tinybus -- \
+            modules checksum "${checksum_args[@]}" --output release-assets/checksum.toml
+
       - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ github.token }}
@@ -275,19 +353,24 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          checksum_file="release-assets/checksum.toml"
-          {
-            echo '[sha256]'
-            find release-assets -maxdepth 1 -type f -name '*.tar.gz' -print0 \
-              | sort -z \
-              | while IFS= read -r -d '' asset; do
-                  printf '"%s" = "%s"\n' \
-                    "$(basename "$asset")" "$(sha256sum "$asset" | awk '{print $1}')"
-                done
-          } > "$checksum_file"
-
-          gh release create "$RELEASE_TAG" release-assets/*
+          gh release create "$RELEASE_TAG" release-assets/* \
             --repo "$REPOSITORY" \
             --verify-tag \
             --title "$RELEASE_TAG" \
             --generate-notes
+
+      - name: Verify the published module through TinyBus
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.publish.outputs.next_version }}
+        run: |
+          set -euo pipefail
+          archive="tinydocs-module-${VERSION}-ubuntu-24.04-x86_64.tar.gz"
+          release_url="https://github.com/${REPOSITORY}/releases/tag/${RELEASE_TAG}"
+          sha256="$(sed -n "s/^\"${archive}\" = \"\([0-9a-f]\{64\}\)\"$/\1/p" release-assets/checksum.toml)"
+          test -n "$sha256"
+          cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
+            --package tinybus --all-features --example github_module_host -- \
+            "$release_url" "$archive" "$sha256"
