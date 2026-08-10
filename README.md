@@ -68,6 +68,38 @@ multi-hundred-megabyte document in memory.
 `DocumentSpec::validate` is public and runs before any synthesis, so a host can
 reject a bad tool call at its own boundary without paying for a blocking hop.
 
+## TinyBus module
+
+The private `tinydocs-module` workspace crate builds TinyDocs as a trusted
+in-process TinyBus module while keeping the published library bus-agnostic:
+
+```sh
+cargo build --release --package tinydocs-module
+```
+
+The native artifact is `target/release/libtinydocs_module.so` on Linux,
+`libtinydocs_module.dylib` on macOS, or `tinydocs_module.dll` on Windows. Load
+it with a TinyBus host built with its `modules` feature. It claims
+`ai.tinyhumans.tinydocs.Docx` at `/ai/tinyhumans/tinydocs/Docx` and exposes:
+
+```text
+GenerateDocx(DocumentSpec) -> Vec<u8>
+```
+
+The release workflow attaches installable Linux and macOS bundles containing
+the matching TinyBus host, the TinyDocs module, a SHA-256 `modules.toml`
+allowlist, and protocol/module documentation. It also attaches the published
+crate and pinned TinyBus source. TinyBus modules are target-specific and
+trusted: download the bundle matching the host, and install it only from a
+trusted release.
+
+Run the real loader test locally after building the release artifact:
+
+```sh
+TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
+  cargo test --package tinydocs-module --test module_e2e -- --ignored
+```
+
 ## Feature flags
 
 | Feature | Default | Gates |
@@ -82,12 +114,14 @@ src/
 ├── error/
 │   ├── mod.rs          # crate-wide `Error` and `Result<T>`
 │   └── test.rs
-└── docx/
+├── docx/
     ├── mod.rs          # `generate` + spec validation
     ├── types.rs        # `DocumentSpec`, `DocumentSection`, limits
     └── test.rs
 tests/
 └── public_api.rs       # integration tests against the public API only
+crates/
+└── tinydocs-module/    # private TinyBus cdylib adapter + loader E2E test
 examples/
 └── basic.rs            # compiled and linted in CI
 ```
@@ -101,6 +135,7 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 cargo run --example basic
+.github/scripts/check-file-coverage.sh 90 coverage.json
 ```
 
 Run the gated build too — it is the only thing that catches a feature that

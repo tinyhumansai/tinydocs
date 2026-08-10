@@ -25,6 +25,11 @@ jobs:
     if: ${{ github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-latest
     environment: Production
+    outputs:
+      crate_name: ${{ steps.version.outputs.crate_name }}
+      next_version: ${{ steps.version.outputs.next_version }}
+      tag: ${{ steps.version.outputs.tag }}
+      tinybus_version: ${{ steps.version.outputs.tinybus_version }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -34,6 +39,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
+
+      - uses: taiki-e/install-action@cargo-llvm-cov
 
       - uses: Swatinem/rust-cache@v2
 
@@ -45,6 +52,9 @@ jobs:
 
       - name: Test
         run: cargo test --all-features
+
+      - name: Require 90% line coverage in every source file
+        run: .github/scripts/check-file-coverage.sh 90 coverage.json
 
       - name: Build documentation
         env:
@@ -58,10 +68,21 @@ jobs:
           set -euo pipefail
 
           metadata="$(cargo metadata --format-version 1 --no-deps)"
-          crate_name="$(jq -r '.packages[0].name' <<< "$metadata")"
-          current_version="$(jq -r '.packages[0].version' <<< "$metadata")"
+          crate_name="tinydocs"
+          current_version="$(jq -r '.packages[] | select(.name == "tinydocs") | .version' <<< "$metadata")"
+          tinybus_version="$(
+            cargo metadata \
+              --manifest-path vendor/tinybus/Cargo.toml \
+              --format-version 1 \
+              --no-deps \
+              | jq -r '.packages[] | select(.name == "tinybus") | .version'
+          )"
           if [[ -z "$current_version" || "$current_version" == "null" ]]; then
             echo "Could not resolve the current crate version" >&2
+            exit 1
+          fi
+          if [[ -z "$tinybus_version" || "$tinybus_version" == "null" ]]; then
+            echo "Could not resolve the TinyBus version" >&2
             exit 1
           fi
 
@@ -99,6 +120,7 @@ jobs:
             echo "current_version=${current_version}"
             echo "next_version=${next_version}"
             echo "tag=${tag}"
+            echo "tinybus_version=${tinybus_version}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Update crate version
@@ -108,6 +130,7 @@ jobs:
         run: |
           set -euo pipefail
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
+          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinydocs-module/Cargo.toml
           cargo update -p "$CRATE_NAME" --precise "$NEXT_VERSION"
 
       - name: Commit version bump and tag
@@ -117,12 +140,31 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock
+          git add Cargo.toml Cargo.lock crates/tinydocs-module/Cargo.toml
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 
       - name: Package crate
-        run: cargo package --locked
+        run: cargo package --locked --package tinydocs
+
+      - name: Package TinyBus source and module SDK
+        run: |
+          set -euo pipefail
+          tinybus_revision="$(git -C vendor/tinybus rev-parse --short=12 HEAD)"
+          git -C vendor/tinybus archive \
+            --format=tar.gz \
+            --prefix="tinybus-${tinybus_revision}/" \
+            --output="$PWD/target/package/tinybus-source-${tinybus_revision}.tar.gz" \
+            HEAD
+
+      - name: Upload source packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: source-packages
+          path: |
+            target/package/${{ steps.version.outputs.crate_name }}-${{ steps.version.outputs.next_version }}.crate
+            target/package/tinybus-source-*.tar.gz
+          if-no-files-found: error
 
       - name: Push release commit and tag
         env:
@@ -133,6 +175,107 @@ jobs:
           git push origin "${RELEASE_TAG}"
 
       - name: Publish to crates.io
-        run: cargo publish --locked
+        run: cargo publish --locked --package tinydocs
         env:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+
+  native-bundles:
+    name: Native bundle (${{ matrix.os }})
+    needs: publish
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - macos-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.publish.outputs.tag }}
+          persist-credentials: false
+          submodules: true
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+            vendor/tinybus -> target
+
+      - name: Build TinyBus host
+        working-directory: vendor/tinybus
+        run: cargo build --locked --release --package tinybus --all-features --bin tinybus
+
+      - name: Build TinyDocs module
+        run: cargo build --locked --release --package tinydocs-module
+
+      - name: Assemble native bundle
+        id: bundle
+        shell: bash
+        env:
+          TINYBUS_VERSION: ${{ needs.publish.outputs.tinybus_version }}
+          TINYDOCS_VERSION: ${{ needs.publish.outputs.next_version }}
+        run: |
+          set -euo pipefail
+
+          target_triple="$(rustc -vV | sed -n 's/^host: //p')"
+          bundle_name="tinydocs-${TINYDOCS_VERSION}-tinybus-${TINYBUS_VERSION}-${target_triple}"
+          bundle_root="dist/${bundle_name}"
+          module_root="${bundle_root}/modules"
+          mkdir -p "${bundle_root}/bin" "$module_root" "${bundle_root}/docs"
+
+          install -m 755 vendor/tinybus/target/release/tinybus "${bundle_root}/bin/tinybus"
+
+          module_artifact="$(find target/release -maxdepth 1 -type f \( -name 'libtinydocs_module.so' -o -name 'libtinydocs_module.dylib' \) -print -quit)"
+          if [[ -z "$module_artifact" || ! -f "$module_artifact" ]]; then
+            echo "the TinyDocs module artifact is missing" >&2
+            exit 1
+          fi
+          install -m 644 "$module_artifact" "$module_root/"
+
+          module_name="$(basename "$module_artifact")"
+          module_hash="$(shasum -a 256 "${module_root}/${module_name}" | awk '{print $1}')"
+          printf '"%s" = "%s"\n' "$module_name" "$module_hash" > "${module_root}/modules.toml"
+
+          install -m 644 LICENSE "${bundle_root}/LICENSE"
+          install -m 644 README.md "${bundle_root}/README.md"
+          install -m 644 docs/specs/tinybus-module.md "${bundle_root}/docs/tinydocs-module.md"
+          install -m 644 vendor/tinybus/docs/protocol.md "${bundle_root}/docs/tinybus-protocol.md"
+          cp -R vendor/tinybus/docs/modules "${bundle_root}/docs/tinybus-modules"
+
+          tar -C dist -czf "dist/${bundle_name}.tar.gz" "$bundle_name"
+          echo "archive=dist/${bundle_name}.tar.gz" >> "$GITHUB_OUTPUT"
+
+      - name: Upload native bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: tinydocs-${{ runner.os }}
+          path: ${{ steps.bundle.outputs.archive }}
+          if-no-files-found: error
+
+  github-release:
+    name: Create GitHub release
+    needs:
+      - publish
+      - native-bundles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: '*'
+          path: release-assets
+          merge-multiple: true
+
+      - name: Create release and upload assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
+          REPOSITORY: ${{ github.repository }}
+        run: >-
+          gh release create "$RELEASE_TAG" release-assets/*
+          --repo "$REPOSITORY"
+          --verify-tag
+          --title "$RELEASE_TAG"
+          --generate-notes

@@ -18,6 +18,7 @@ Commands actually run, with their outcome:
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] `cargo build --all-targets --all-features`
 - [ ] `cargo test --all-features`
+- [ ] `.github/scripts/check-file-coverage.sh 90 coverage.json`
 
 ## Tests
 

@@ -39,6 +39,7 @@ src/
     └── test.rs         # module-local unit tests
 tests/                  # integration tests against the public API only
 examples/               # runnable, compiled-in-CI usage examples
+crates/tinydocs-module/ # private TinyBus cdylib adapter
 vendor/tinybus/         # pinned TinyBus source; optional until wired by a project
 docs/
 ├── specs/              # behavior and architecture specifications
@@ -68,7 +69,7 @@ the crate-wide `Result<T>` from fallible public APIs.
 
 ## Build And Test
 
-Run every command from the repository root. These four are the contract; CI
+Run every command from the repository root. These five are the contract; CI
 runs exactly them, so a green local run should mean a green CI run.
 
 ```sh
@@ -76,6 +77,7 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
+.github/scripts/check-file-coverage.sh 90 coverage.json
 ```
 
 Supporting commands:
@@ -86,6 +88,8 @@ Supporting commands:
 - `cargo doc --no-deps --all-features` — build the rustdoc CI also builds with
   `RUSTDOCFLAGS="-D warnings"`.
 - `cargo test --doc` — run doctests alone when editing documentation examples.
+- `cargo install cargo-llvm-cov` — install the coverage tool required by the
+  per-file coverage gate.
 
 Never skip, ignore, or delete a failing test to make a command pass. Fix the
 root cause, or stop and report the blocker.
@@ -167,9 +171,9 @@ on every generated crate.
 - Tests must be deterministic and independent of network, wall-clock time, and
   execution order. Gate any live/network test behind a feature or an env var and
   name it `live_*` so it is easy to exclude.
-- Maintain at least 80% coverage of meaningful library behavior. Add or update
-  tests with every behavior change, and note any deliberately untested edge case
-  in the pull request description.
+- Maintain at least 90% line coverage in every source file under `src/`. Add or
+  update tests with every behavior change, and note any deliberately untested
+  edge case in the pull request description.
 
 Write the test first when fixing a bug: a failing test that reproduces the
 report, then the fix that turns it green.

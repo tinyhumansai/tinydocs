@@ -12,11 +12,16 @@ out of scope. A roadmap that lists everything is a roadmap nobody trusts.
 - lint configuration in `[lints]`, enforced identically locally and in CI
 - CI: format, clippy, build, test, rustdoc, MSRV, and supply-chain checks
 - a manual release workflow that versions, tags, and publishes to crates.io
+- a TinyBus-loadable native module exposing DOCX generation
+- installable Linux and macOS bundles with the TinyBus host, module allowlist,
+  source packages, and protocol documentation on GitHub releases
+- end-to-end coverage through TinyBus's real dynamic loader and broker
 
 ## Next
 
-- the first real feature area, replacing the placeholder `greeting` module
-- module-level `README.md` and `docs/spec/` entries as modules grow
+- path or file-descriptor transfer for document formats that outgrow the bus
+  frame limit
+- additional document formats behind focused feature flags
 
 ## Out Of Scope
 

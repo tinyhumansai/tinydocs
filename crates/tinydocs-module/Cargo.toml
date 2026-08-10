@@ -1,0 +1,25 @@
+[package]
+name = "tinydocs-module"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+description = "Trusted TinyBus module adapter for TinyDocs."
+repository = "https://github.com/tinyhumansai/tinydocs"
+publish = false
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+
+[dependencies]
+# The pure document library remains independently publishable and bus-agnostic.
+tinydocs = { path = "../..", default-features = false, features = ["docx"] }
+# TinyBus provides the typed service interface and dynamic module host ABI.
+tinybus = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus", default-features = false, features = ["macros", "modules"] }
+# The module-side SDK owns its runtime and exports the stable C entrypoints.
+tinybus-module = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus-module" }
+# Module methods move CPU-bound document synthesis onto Tokio's blocking pool.
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+
+[lints]
+workspace = true
