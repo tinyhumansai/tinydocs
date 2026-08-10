@@ -1,16 +1,15 @@
-//! End-to-end test for loading the built `TinyDocs` dynamic module into `TinyBus`.
+//! End-to-end test for loading the built `TinyDocs` module into `TinyBus`.
 
-#![cfg(feature = "module")]
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::time::Duration;
 
+use tinydocs::docx::{DocumentSection, DocumentSpec};
+use tinydocs_module::{BUS_NAME, OBJECT_PATH};
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleState};
 use tinybus::transport::memory::MemoryBus;
-use tinydocs::bus::{BUS_NAME, OBJECT_PATH};
-use tinydocs::docx::{DocumentSection, DocumentSpec};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires TINYDOCS_TEST_MODULE to point at the built cdylib"]
@@ -22,7 +21,7 @@ async fn built_cdylib_loads_and_generates_a_docx_over_the_bus() {
     let broker_task = broker.spawn(bus.clone());
     let modules = ModuleHost::new(broker);
     let loaded = modules.load_file(artifact).expect("module should load");
-    assert_eq!(loaded.name, "tinydocs");
+    assert_eq!(loaded.name, "tinydocs-module");
 
     let client = Connection::connect(bus.connect().await.unwrap())
         .await

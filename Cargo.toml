@@ -21,10 +21,10 @@ exclude = [
     "deny.toml",
 ]
 
-[lib]
-# Keep the ordinary Rust library while also allowing the `module` feature to
-# produce the native artifact consumed by TinyBus's dynamic module loader.
-crate-type = ["rlib", "cdylib"]
+[workspace]
+members = ["crates/tinydocs-module"]
+default-members = [".", "crates/tinydocs-module"]
+resolver = "3"
 
 [dependencies]
 # Derive macros for the crate-wide error type in `src/error/mod.rs`. Every
@@ -37,13 +37,6 @@ serde = { version = "1", features = ["derive"] }
 # OOXML `.docx` synthesis. Optional: exclusive to the `docx` feature so a host
 # that only needs extraction does not pull the writer stack.
 docx-rs = { version = "0.4.20", optional = true }
-# TinyBus provides the typed service interface and the host/module ABI. These
-# stay optional so ordinary document generation does not pull in a bus runtime.
-tinybus = { version = "0.1.0", path = "vendor/tinybus/crates/tinybus", default-features = false, features = ["macros", "modules"], optional = true }
-# The module-side SDK owns the runtime and exports the stable C ABI entrypoints.
-tinybus-module = { version = "0.1.0", path = "vendor/tinybus/crates/tinybus-module", optional = true }
-# Module methods move CPU-bound document synthesis onto Tokio's blocking pool.
-tokio = { version = "1", features = ["macros", "rt-multi-thread"], optional = true }
 
 [dev-dependencies]
 # `.docx` output is a zip container; the tests re-open the produced bytes and
@@ -64,19 +57,17 @@ required-features = ["docx"]
 default = ["docx"]
 # `.docx` generation via `docx-rs`.
 docx = ["dep:docx-rs"]
-# Trusted in-process TinyBus module exposing document synthesis over the bus.
-module = ["docx", "dep:tinybus", "dep:tinybus-module", "dep:tokio"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with
 # `-D warnings`, so anything set to "warn" here fails the build in CI.
-[lints.rust]
+[workspace.lints.rust]
 unsafe_code = "forbid"
 missing_docs = "warn"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
 rust_2018_idioms = { level = "warn", priority = -1 }
 
-[lints.clippy]
+[workspace.lints.clippy]
 all = { level = "warn", priority = -1 }
 pedantic = { level = "warn", priority = -1 }
 # Library code must not panic on its own; tests and examples may.
@@ -93,9 +84,12 @@ doc_markdown = "warn"
 # `#[must_use]` on pure public functions.
 must_use_candidate = "warn"
 
-[lints.rustdoc]
+[workspace.lints.rustdoc]
 broken_intra_doc_links = "warn"
 private_intra_doc_links = "warn"
+
+[lints]
+workspace = true
 
 [profile.release]
 # Cross-crate optimization and smaller, faster binaries for release builds.

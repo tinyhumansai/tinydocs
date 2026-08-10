@@ -1,20 +1,17 @@
-//! `TinyBus` module boundary for document synthesis.
+//! `TinyBus` service boundary for document synthesis.
 //!
-//! Enabling the `module` feature turns the crate's `cdylib` output into a
-//! trusted in-process `TinyBus` module. The module owns no persistent state and
-//! exposes one object: `GenerateDocx` accepts the
-//! same typed [`DocumentSpec`] as the Rust API and returns the complete DOCX
-//! bytes.
+//! The module owns no persistent state and exposes one object: `GenerateDocx`
+//! accepts the same typed [`DocumentSpec`] as the Rust API and returns the
+//! complete DOCX bytes.
 //!
 //! The `TinyBus` wire format has a 16 MiB frame limit. [`DocumentSpec`]'s
 //! aggregate text limit keeps normal output comfortably below that boundary;
 //! a larger future document format should use a path or file-descriptor based
 //! transfer instead of increasing the bus frame cap.
 
+use tinydocs::Error;
+use tinydocs::docx::{self, DocumentSpec};
 use tinybus::{Connection, Error as BusError, Result as BusResult};
-
-use crate::Error;
-use crate::docx::{self, DocumentSpec};
 
 /// Well-known name and interface exported by the `TinyDocs` module.
 pub const BUS_NAME: &str = "ai.tinyhumans.tinydocs.Docx";
