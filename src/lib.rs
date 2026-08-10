@@ -21,7 +21,8 @@
 //!
 //! # Example
 //!
-//! ```
+#![cfg_attr(feature = "docx", doc = "```")]
+#![cfg_attr(not(feature = "docx"), doc = "```ignore")]
 //! use tinydocs::docx::{self, DocumentSection, DocumentSpec};
 //!
 //! let spec = DocumentSpec {
