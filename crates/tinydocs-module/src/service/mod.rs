@@ -21,6 +21,7 @@ pub const OBJECT_PATH: &str = "/ai/tinyhumans/tinydocs/Docx";
 
 const INVALID_INPUT_ERROR: &str = "ai.tinyhumans.tinydocs.Error.InvalidInput";
 const GENERATION_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.GenerationFailed";
+const MODULE_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.ModuleFailed";
 
 struct TinyDocs;
 
@@ -42,6 +43,7 @@ fn map_error(error: &Error) -> BusError {
     let name = match error {
         Error::InvalidInput { .. } => INVALID_INPUT_ERROR,
         Error::GenerationFailed { .. } => GENERATION_FAILED_ERROR,
+        _ => MODULE_FAILED_ERROR,
     };
     BusError::MethodFailed {
         name: name.to_string(),
