@@ -9,7 +9,14 @@
 //! # What this crate deliberately does not do
 //!
 //! No filesystem access, no subprocesses, no async runtime, no deadline
-//! handling. `docx::generate` is synchronous and CPU-bound. A host that runs
+#![cfg_attr(
+    feature = "docx",
+    doc = "handling. [`docx::generate`] is synchronous and CPU-bound. A host that runs"
+)]
+#![cfg_attr(
+    not(feature = "docx"),
+    doc = "handling. `docx::generate` (this build has the `docx` feature disabled) is synchronous and CPU-bound. A host that runs"
+)]
 //! on an async executor owns the blocking-pool hop and the timeout, because
 //! only the host knows its own executor and deadline policy — and a crate that
 //! guessed at either would be wrong for every other host.
