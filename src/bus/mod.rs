@@ -1,12 +1,12 @@
-//! TinyBus module boundary for document synthesis.
+//! `TinyBus` module boundary for document synthesis.
 //!
 //! Enabling the `module` feature turns the crate's `cdylib` output into a
-//! trusted in-process TinyBus module. The module owns no persistent state and
+//! trusted in-process `TinyBus` module. The module owns no persistent state and
 //! exposes one object: [`GenerateDocx`](TinyDocs::generate_docx) accepts the
 //! same typed [`DocumentSpec`] as the Rust API and returns the complete DOCX
 //! bytes.
 //!
-//! The TinyBus wire format has a 16 MiB frame limit. [`DocumentSpec`]'s
+//! The `TinyBus` wire format has a 16 MiB frame limit. [`DocumentSpec`]'s
 //! aggregate text limit keeps normal output comfortably below that boundary;
 //! a larger future document format should use a path or file-descriptor based
 //! transfer instead of increasing the bus frame cap.
@@ -16,10 +16,10 @@ use tinybus::{Connection, Error as BusError, Result as BusResult};
 use crate::Error;
 use crate::docx::{self, DocumentSpec};
 
-/// Well-known name and interface exported by the TinyDocs module.
+/// Well-known name and interface exported by the `TinyDocs` module.
 pub const BUS_NAME: &str = "ai.tinyhumans.tinydocs.Docx";
 
-/// Object path exported by the TinyDocs module.
+/// Object path exported by the `TinyDocs` module.
 pub const OBJECT_PATH: &str = "/ai/tinyhumans/tinydocs/Docx";
 
 const INVALID_INPUT_ERROR: &str = "ai.tinyhumans.tinydocs.Error.InvalidInput";
@@ -37,11 +37,11 @@ impl TinyDocs {
                 name: GENERATION_FAILED_ERROR.to_string(),
                 message: "document generation worker failed".to_string(),
             })?
-            .map_err(map_error)
+            .map_err(|error| map_error(&error))
     }
 }
 
-fn map_error(error: Error) -> BusError {
+fn map_error(error: &Error) -> BusError {
     let name = match error {
         Error::InvalidInput { .. } => INVALID_INPUT_ERROR,
         Error::GenerationFailed { .. } => GENERATION_FAILED_ERROR,
@@ -60,21 +60,25 @@ async fn setup(connection: Connection) -> BusResult<()> {
     Ok(())
 }
 
-// The SDK generates three public, revisioned C ABI symbols. Their contract is
-// documented by TinyBus rather than as Rust-callable API items in this crate.
-#[expect(
+// Isolate the three generated public C symbols so the lint exception cannot
+// hide undocumented Rust API. Their contract is TinyBus ABI v1, and none is a
+// Rust-callable export from this private module.
+#[allow(
     missing_docs,
-    reason = "generated TinyBus ABI symbols are documented by the module SDK"
+    unreachable_pub,
+    reason = "generated C ABI symbols are documented by the TinyBus module SDK"
 )]
-tinybus_module::module_export! {
-    setup = setup,
-    worker_threads = 2,
-    provides = ["ai.tinyhumans.tinydocs.Docx"],
-    methods = ["GenerateDocx"],
-    signals = [],
-    requires = [],
-    optional = [],
-    lazy = false,
+mod exports {
+    tinybus_module::module_export! {
+        setup = super::setup,
+        worker_threads = 2,
+        provides = ["ai.tinyhumans.tinydocs.Docx"],
+        methods = ["GenerateDocx"],
+        signals = [],
+        requires = [],
+        optional = [],
+        lazy = false,
+    }
 }
 
 #[cfg(test)]
