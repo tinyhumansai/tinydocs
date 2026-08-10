@@ -4,12 +4,12 @@
 
 use std::time::Duration;
 
-use tinydocs::docx::{DocumentSection, DocumentSpec};
-use tinydocs_module::{BUS_NAME, OBJECT_PATH};
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleState};
 use tinybus::transport::memory::MemoryBus;
+use tinydocs::docx::{DocumentSection, DocumentSpec};
+use tinydocs_module::{BUS_NAME, OBJECT_PATH};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires TINYDOCS_TEST_MODULE to point at the built cdylib"]

@@ -12,7 +12,10 @@ fn service_identity_is_valid_and_dispatch_matches_the_manifest() {
     assert!(tinybus::ObjectPath::new(OBJECT_PATH).is_ok());
 
     let members = TinyDocs.members();
-    assert_eq!(members, &[tinybus::MemberName::new("GenerateDocx").unwrap()]);
+    assert_eq!(
+        members,
+        &[tinybus::MemberName::new("GenerateDocx").unwrap()]
+    );
 }
 
 #[test]

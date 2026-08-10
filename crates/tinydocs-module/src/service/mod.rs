@@ -9,9 +9,9 @@
 //! a larger future document format should use a path or file-descriptor based
 //! transfer instead of increasing the bus frame cap.
 
+use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinydocs::Error;
 use tinydocs::docx::{self, DocumentSpec};
-use tinybus::{Connection, Error as BusError, Result as BusResult};
 
 /// Well-known name and interface exported by the `TinyDocs` module.
 pub const BUS_NAME: &str = "ai.tinyhumans.tinydocs.Docx";
