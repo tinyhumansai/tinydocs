@@ -9,7 +9,7 @@
 //! # What this crate deliberately does not do
 //!
 //! No filesystem access, no subprocesses, no async runtime, no deadline
-//! handling. [`docx::generate`] is synchronous and CPU-bound. A host that runs
+//! handling. `docx::generate` is synchronous and CPU-bound. A host that runs
 //! on an async executor owns the blocking-pool hop and the timeout, because
 //! only the host knows its own executor and deadline policy — and a crate that
 //! guessed at either would be wrong for every other host.
@@ -17,7 +17,11 @@
 //! # Layout
 //!
 //! - [`error`](self::Error) — the crate-wide [`Error`] and [`Result`].
-//! - [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis.
+#![cfg_attr(feature = "docx", doc = "- [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis.")]
+#![cfg_attr(
+    not(feature = "docx"),
+    doc = "- `docx` (disabled in this build) — `.docx` (OOXML `WordprocessingML`) synthesis."
+)]
 //!
 //! # Example
 //!
