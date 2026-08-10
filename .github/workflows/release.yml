@@ -330,7 +330,11 @@ jobs:
         run: |
           set -euo pipefail
           shopt -s nullglob
-          assets=(release-assets/tinydocs-module-*.tar.gz release-assets/tinydocs-module-*.zip)
+          mapfile -t assets < <(
+            find release-assets -type f \
+              \( -name 'tinydocs-module-*.tar.gz' -o -name 'tinydocs-module-*.zip' \) \
+              | sort
+          )
           if [[ ${#assets[@]} -ne 11 ]]; then
             echo "expected 11 module archives, found ${#assets[@]}" >&2
             exit 1
