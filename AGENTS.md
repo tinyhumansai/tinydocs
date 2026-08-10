@@ -33,13 +33,13 @@ This is a Rust 2024 library crate rooted at `Cargo.toml`.
 src/
 ├── lib.rs              # crate docs + the entire public re-export surface
 ├── error/mod.rs        # crate-wide `Error` and `Result<T>`
-├── bus/                # optional TinyBus service and module ABI exports
 └── <feature>/          # one directory per feature area
     ├── mod.rs          # module docs, wiring, smallest useful public API
     ├── types.rs        # substantial type definitions
     └── test.rs         # module-local unit tests
 tests/                  # integration tests against the public API only
 examples/               # runnable, compiled-in-CI usage examples
+crates/tinydocs-module/ # private TinyBus cdylib adapter
 vendor/tinybus/         # pinned TinyBus source; optional until wired by a project
 docs/
 ├── specs/              # behavior and architecture specifications

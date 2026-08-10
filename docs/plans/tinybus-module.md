@@ -8,8 +8,9 @@ default library dependency graph.
 ## Completed work
 
 - [x] Advance `vendor/tinybus` to canonical `main` with module ABI v1.
-- [x] Add optional TinyBus SDK, host, macro, and runtime dependencies.
-- [x] Emit both `rlib` and `cdylib` crate types.
+- [x] Add a private adapter crate with TinyBus SDK, host, macro, and runtime
+  dependencies so `tinydocs` remains publishable.
+- [x] Emit both `rlib` and `cdylib` adapter crate types.
 - [x] Add the typed DOCX service and stable bus identity.
 - [x] Preserve domain-specific errors at the wire boundary.
 - [x] Add unit coverage for identity, dispatch, and error mapping.
@@ -25,7 +26,7 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
-cargo build --locked --release --features module
-TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs.so" \
-  cargo test --locked --all-features --test module_e2e -- --ignored
+cargo build --locked --release --package tinydocs-module
+TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
+  cargo test --locked --package tinydocs-module --test module_e2e -- --ignored
 ```

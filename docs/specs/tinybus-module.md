@@ -28,8 +28,10 @@ production.
 
 ## Behavior
 
-The `module` Cargo feature implies `docx` and builds the library as a `cdylib`.
-The module claims `ai.tinyhumans.tinydocs.Docx`, serves the object path
+The private `tinydocs-module` workspace crate depends on the public library's
+`docx` feature and builds as a `cdylib`. This separation keeps unpublished,
+vendored TinyBus packages out of the crates.io package manifest. The module
+claims `ai.tinyhumans.tinydocs.Docx`, serves the object path
 `/ai/tinyhumans/tinydocs/Docx`, and exports one method:
 
 ```text
@@ -58,7 +60,8 @@ module itself retains no document state between calls.
 
 ## Acceptance criteria
 
-- `cargo build --release --features module` emits the platform dynamic library.
+- `cargo build --release --package tinydocs-module` emits the platform dynamic
+  library.
 - TinyBus `ModuleHost` admits that artifact and reaches `ready` state.
 - A proxy call to `GenerateDocx` returns bytes beginning with the DOCX `PK`
   signature.

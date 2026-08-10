@@ -63,12 +63,12 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: Build the loadable module
-        run: cargo build --locked --release --features module
+        run: cargo build --locked --release --package tinydocs-module
 
       - name: Load the module and call GenerateDocx
         env:
-          TINYDOCS_TEST_MODULE: ${{ github.workspace }}/target/release/libtinydocs.so
-        run: cargo test --locked --all-features --test module_e2e -- --ignored
+          TINYDOCS_TEST_MODULE: ${{ github.workspace }}/target/release/libtinydocs_module.so
+        run: cargo test --locked --package tinydocs-module --test module_e2e -- --ignored
 
   docs:
     name: Docs
