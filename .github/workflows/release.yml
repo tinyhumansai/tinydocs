@@ -317,21 +317,23 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          mapfile -t artifact_ids < <(
+          mapfile -t module_artifacts < <(
             gh api --paginate \
               "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts" \
-              --jq '.artifacts[] | select(.expired == false) | .id'
+              --jq '.artifacts[] | select(.expired == false and (.name | startswith("tinydocs-module-"))) | [.id, .name] | @tsv'
           )
-          if [[ ${#artifact_ids[@]} -eq 0 ]]; then
-            echo "no unexpired workflow artifacts found" >&2
+          if [[ ${#module_artifacts[@]} -ne 11 ]]; then
+            printf 'expected 11 module artifacts, found %s:\n' "${#module_artifacts[@]}" >&2
+            printf '%s\n' "${module_artifacts[@]}" >&2
             exit 1
           fi
-          for artifact_id in "${artifact_ids[@]}"; do
+          for artifact in "${module_artifacts[@]}"; do
+            IFS=$'\t' read -r artifact_id artifact_name <<< "$artifact"
             archive="$(mktemp)"
             gh api \
               "/repos/${GITHUB_REPOSITORY}/actions/artifacts/${artifact_id}/zip" \
               > "$archive"
-            unzip -q "$archive" -d release-assets
+            unzip -q "$archive" -d "release-assets/$artifact_name"
             rm -f "$archive"
           done
 
@@ -354,7 +356,8 @@ jobs:
               | sort
           )
           if [[ ${#assets[@]} -ne 11 ]]; then
-            echo "expected 11 module archives, found ${#assets[@]}" >&2
+            printf 'expected 11 module archives, found %s; extracted files:\n' "${#assets[@]}" >&2
+            find release-assets -type f -print >&2
             exit 1
           fi
           checksum_args=()
