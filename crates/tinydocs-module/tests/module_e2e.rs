@@ -22,6 +22,16 @@ async fn built_cdylib_loads_and_generates_a_docx_over_the_bus() {
     let modules = ModuleHost::new(broker);
     let loaded = modules.load_file(artifact).expect("module should load");
     assert_eq!(loaded.name, "tinydocs-module");
+    assert_eq!(loaded.manifest.bus_name.as_str(), BUS_NAME);
+    assert_eq!(loaded.manifest.object_path.as_str(), OBJECT_PATH);
+    assert!(
+        loaded
+            .manifest
+            .provides
+            .iter()
+            .flat_map(|interface| interface.methods.iter())
+            .any(|method| method.as_str() == "GenerateDocx")
+    );
 
     let client = Connection::connect(bus.connect().await.unwrap())
         .await

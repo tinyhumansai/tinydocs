@@ -273,9 +273,21 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
           REPOSITORY: ${{ github.repository }}
-        run: >-
+        run: |
+          set -euo pipefail
+          checksum_file="release-assets/checksum.toml"
+          {
+            echo '[sha256]'
+            find release-assets -maxdepth 1 -type f -name '*.tar.gz' -print0 \
+              | sort -z \
+              | while IFS= read -r -d '' asset; do
+                  printf '"%s" = "%s"\n' \
+                    "$(basename "$asset")" "$(sha256sum "$asset" | awk '{print $1}')"
+                done
+          } > "$checksum_file"
+
           gh release create "$RELEASE_TAG" release-assets/*
-          --repo "$REPOSITORY"
-          --verify-tag
-          --title "$RELEASE_TAG"
-          --generate-notes
+            --repo "$REPOSITORY" \
+            --verify-tag \
+            --title "$RELEASE_TAG" \
+            --generate-notes
