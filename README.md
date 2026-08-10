@@ -112,7 +112,7 @@ src/
 ├── error/
 │   ├── mod.rs          # crate-wide `Error` and `Result<T>`
 │   └── test.rs
-└── docx/
+├── docx/
     ├── mod.rs          # `generate` + spec validation
     ├── types.rs        # `DocumentSpec`, `DocumentSection`, limits
     └── test.rs
