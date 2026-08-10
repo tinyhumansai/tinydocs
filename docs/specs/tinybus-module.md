@@ -16,7 +16,7 @@ production.
 - Preserve the existing pure Rust library API.
 - Build a target-specific dynamic library implementing TinyBus module ABI v1.
 - Expose typed DOCX generation through a stable bus identity.
-- Publish native module artifacts with each GitHub release.
+- Publish installable native bundles with each GitHub release.
 - Test loading and calling the compiled artifact through a real broker.
 
 ## Non-goals
@@ -66,7 +66,9 @@ module itself retains no document state between calls.
 - A proxy call to `GenerateDocx` returns bytes beginning with the DOCX `PK`
   signature.
 - CI executes that loader test on Linux.
-- A release uploads one native module asset from each supported runner OS.
+- A release uploads Linux and macOS bundles containing the matching TinyBus
+  host, TinyDocs module, SHA-256 allowlist, and operational documentation.
+- The release also uploads the crates.io package and pinned TinyBus source.
 
 ## Open questions
 

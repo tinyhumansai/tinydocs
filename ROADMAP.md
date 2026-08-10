@@ -13,7 +13,8 @@ out of scope. A roadmap that lists everything is a roadmap nobody trusts.
 - CI: format, clippy, build, test, rustdoc, MSRV, and supply-chain checks
 - a manual release workflow that versions, tags, and publishes to crates.io
 - a TinyBus-loadable native module exposing DOCX generation
-- native Linux, macOS, and Windows module assets on GitHub releases
+- installable Linux and macOS bundles with the TinyBus host, module allowlist,
+  source packages, and protocol documentation on GitHub releases
 - end-to-end coverage through TinyBus's real dynamic loader and broker
 
 ## Next

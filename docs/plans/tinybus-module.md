@@ -16,7 +16,8 @@ default library dependency graph.
 - [x] Add unit coverage for identity, dispatch, and error mapping.
 - [x] Add an ignored integration test that loads the built native artifact.
 - [x] Run that real-loader test in CI.
-- [x] Build and upload Linux, macOS, and Windows assets during release.
+- [x] Build and upload installable Linux and macOS TinyBus bundles, source
+  packages, module allowlists, and documentation during release.
 - [x] Document build, loading, trust, and payload constraints.
 
 ## Verification
@@ -26,6 +27,7 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
+.github/scripts/check-file-coverage.sh 90 coverage.json
 cargo build --locked --release --package tinydocs-module
 TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
   cargo test --locked --package tinydocs-module --test module_e2e -- --ignored

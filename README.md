@@ -86,9 +86,12 @@ it with a TinyBus host built with its `modules` feature. It claims
 GenerateDocx(DocumentSpec) -> Vec<u8>
 ```
 
-The release workflow attaches a native module for Linux, macOS, and Windows to
-each GitHub release. TinyBus modules are target-specific and trusted: download
-the artifact matching the host, and install it only from a trusted release.
+The release workflow attaches installable Linux and macOS bundles containing
+the matching TinyBus host, the TinyDocs module, a SHA-256 `modules.toml`
+allowlist, and protocol/module documentation. It also attaches the published
+crate and pinned TinyBus source. TinyBus modules are target-specific and
+trusted: download the bundle matching the host, and install it only from a
+trusted release.
 
 Run the real loader test locally after building the release artifact:
 
@@ -132,6 +135,7 @@ cargo fmt --all -- --check
 cargo clippy --all-targets --all-features -- -D warnings
 cargo test --all-features
 cargo run --example basic
+.github/scripts/check-file-coverage.sh 90 coverage.json
 ```
 
 Run the gated build too — it is the only thing that catches a feature that
