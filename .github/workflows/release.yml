@@ -54,7 +54,7 @@ jobs:
         run: cargo test --all-features
 
       - name: Require 90% line coverage in every source file
-        run: .github/scripts/check-file-coverage.sh 90 coverage.json
+        run: .github/scripts/check-file-coverage.sh 90 target/coverage.json
 
       - name: Build documentation
         env:
