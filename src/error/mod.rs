@@ -62,8 +62,8 @@ impl Error {
         }
     }
 
-    /// Truncate `raw` to [`Error::MAX_DETAIL_CHARS`] characters, appending
-    /// [`Error::TRUNCATION_SUFFIX`] when anything was dropped.
+    /// Truncate `raw` to [`Error::MAX_DETAIL_CHARS`] characters, appending the
+    /// standard truncation suffix when anything was dropped.
     #[must_use]
     pub fn truncate_detail(raw: &str) -> String {
         if raw.chars().count() <= Self::MAX_DETAIL_CHARS {
