@@ -2,7 +2,7 @@
 //!
 //! Enabling the `module` feature turns the crate's `cdylib` output into a
 //! trusted in-process `TinyBus` module. The module owns no persistent state and
-//! exposes one object: [`GenerateDocx`](TinyDocs::generate_docx) accepts the
+//! exposes one object: `GenerateDocx` accepts the
 //! same typed [`DocumentSpec`] as the Rust API and returns the complete DOCX
 //! bytes.
 //!
