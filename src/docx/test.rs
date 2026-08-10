@@ -148,17 +148,23 @@ fn rejects_an_over_long_bullet_naming_its_index() {
 
 #[test]
 fn rejects_a_spec_over_the_aggregate_character_budget() {
-    // Each individual field is within its own limit; only the sum is not.
+    // Each individual field is within its own limit; only the sum is not. One
+    // section with just enough max-length paragraphs to cross MAX_TOTAL_CHARS
+    // reproduces that without allocating hundreds of megabytes: repeating a
+    // whole section MAX_SECTIONS times (the original fixture) built ~512 MB
+    // of paragraph text before validation ever ran.
+    let paragraph_count = MAX_TOTAL_CHARS / MAX_PARAGRAPH_CHARS + 1;
+    assert!(paragraph_count <= MAX_PARAGRAPHS_PER_SECTION);
     let paragraph = "x".repeat(MAX_PARAGRAPH_CHARS);
     let big = DocumentSection {
         heading: Some("Heading".to_string()),
-        paragraphs: vec![paragraph; MAX_PARAGRAPHS_PER_SECTION],
+        paragraphs: vec![paragraph; paragraph_count],
         bullets: vec![],
     };
     let s = DocumentSpec {
         title: "Huge".to_string(),
         author: None,
-        sections: vec![big; MAX_SECTIONS],
+        sections: vec![big],
     };
     // Sanity: this spec passes every per-field check.
     assert!(s.sections.len() <= MAX_SECTIONS);
