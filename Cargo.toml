@@ -43,6 +43,11 @@ docx-rs = { version = "0.4.20", optional = true }
 # front-end this crate does not use, which is precisely why it is gated — a host
 # that only generates documents should not carry a syntax highlighter.
 ppt-rs = { version = "0.2.14", optional = true }
+# `.pdf` text extraction. Optional: exclusive to the `pdf` feature. It brings a
+# font and PostScript parsing stack (`lopdf`, CFF/Type1/CMap parsers) that only
+# the extraction path needs, so a host that never reads a PDF should not carry
+# it.
+pdf-extract = { version = "0.10", optional = true }
 
 [dev-dependencies]
 # `.docx` output is a zip container; the tests re-open the produced bytes and
@@ -60,11 +65,13 @@ name = "basic"
 required-features = ["docx"]
 
 [features]
-default = ["docx", "pptx"]
+default = ["docx", "pptx", "pdf"]
 # `.docx` generation via `docx-rs`.
 docx = ["dep:docx-rs"]
 # `.pptx` generation via `ppt-rs`.
 pptx = ["dep:ppt-rs"]
+# `.pdf` text extraction via `pdf-extract`.
+pdf = ["dep:pdf-extract"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with
 # `-D warnings`, so anything set to "warn" here fails the build in CI.

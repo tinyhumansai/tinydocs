@@ -1,6 +1,7 @@
 # TinyDocs
 
-Agent-friendly document synthesis in Rust: `.docx` and `.pptx`.
+Agent-friendly document synthesis and text extraction in Rust: writes `.docx`
+and `.pptx`, reads `.pdf`.
 
 `tinydocs` turns a typed, validated document spec into real office-format
 bytes. It is built for hosts that let a language model produce documents: the
@@ -159,6 +160,7 @@ way, so the contract and its validation survive any combination.
 | --- | --- | --- | --- |
 | `docx` | on | `.docx` synthesis via `docx-rs` | `quick-xml` |
 | `pptx` | on | `.pptx` synthesis via `ppt-rs` | `syntect`, `pulldown-cmark`, `xml-rs` |
+| `pdf` | on | `.pdf` text extraction via `pdf-extract` | `lopdf`, CFF/Type1/CMap parsers |
 
 ## Layout
 
@@ -177,7 +179,10 @@ src/
 │   ├── mod.rs          # `generate` — the `WordprocessingML` mapping
 │   └── test.rs
 ├── pptx/
-    ├── mod.rs          # `generate` — the `PresentationML` mapping + image layout
+│   ├── mod.rs          # `generate` — the `PresentationML` mapping + image layout
+│   └── test.rs
+├── pdf/
+    ├── mod.rs          # `extract_text` — the one read path in the crate
     └── test.rs
 tests/
 └── public_api.rs       # integration tests against the public API only

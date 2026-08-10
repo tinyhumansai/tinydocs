@@ -1,4 +1,4 @@
-//! Agent-friendly document synthesis in Rust.
+//! Agent-friendly document synthesis and text extraction in Rust.
 //!
 //! `tinydocs` turns a typed, validated document spec into real office-format
 //! bytes. It is built for hosts that let a language model produce documents:
@@ -43,6 +43,11 @@
     not(feature = "pptx"),
     doc = "- `pptx` (disabled in this build) — `.pptx` (OOXML `PresentationML`) synthesis."
 )]
+#![cfg_attr(feature = "pdf", doc = "- [`pdf`] — `.pdf` text extraction.")]
+#![cfg_attr(
+    not(feature = "pdf"),
+    doc = "- `pdf` (disabled in this build) — `.pdf` text extraction."
+)]
 //!
 //! # Example
 //!
@@ -75,6 +80,8 @@
 //! - `docx` (default) — `.docx` synthesis via `docx-rs`.
 //! - `pptx` (default) — `.pptx` synthesis via `ppt-rs`, which also drops
 //!   `syntect` and `pulldown-cmark`.
+//! - `pdf` (default) — `.pdf` text extraction via `pdf-extract`, which also
+//!   drops its font and `PostScript` parsing stack.
 
 mod error;
 
@@ -85,5 +92,8 @@ pub mod docx;
 
 #[cfg(feature = "pptx")]
 pub mod pptx;
+
+#[cfg(feature = "pdf")]
+pub mod pdf;
 
 pub use error::{Error, Result};

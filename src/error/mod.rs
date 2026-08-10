@@ -40,6 +40,22 @@ pub enum Error {
         /// Truncated underlying library error.
         detail: String,
     },
+
+    /// The underlying library failed to extract text from an input document.
+    ///
+    /// Distinct from [`Error::GenerationFailed`] because the two have opposite
+    /// causes and opposite remedies: generation fails on *our* output path and
+    /// usually means a bug or an exhausted resource, whereas extraction fails on
+    /// *someone else's* input and usually means the document is damaged,
+    /// encrypted, or carries no extractable text layer at all. A caller that
+    /// retries one should not retry the other.
+    ///
+    /// `detail` is truncated on the same bound as `GenerationFailed`.
+    #[error("text extraction failed: {detail}")]
+    ExtractionFailed {
+        /// Truncated underlying library error.
+        detail: String,
+    },
 }
 
 impl Error {
@@ -73,6 +89,15 @@ impl Error {
         let mut out: String = raw.chars().take(keep).collect();
         out.push_str(Self::TRUNCATION_SUFFIX);
         out
+    }
+
+    /// Build an [`Error::ExtractionFailed`] with `raw` truncated (UTF-8-safe) to
+    /// [`Error::MAX_DETAIL_CHARS`].
+    #[must_use]
+    pub fn extraction_failed(raw: &str) -> Self {
+        Self::ExtractionFailed {
+            detail: Self::truncate_detail(raw),
+        }
     }
 
     /// Build an [`Error::InvalidInput`] for `field` violating `reason`.
