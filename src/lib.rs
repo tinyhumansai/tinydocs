@@ -59,10 +59,15 @@
 //!
 //! - `docx` (default) — `.docx` synthesis via `docx-rs`. Turning it off drops
 //!   the whole OOXML writer stack.
+//! - `module` — builds the crate as a TinyBus-loadable dynamic library and
+//!   exposes [`bus::GenerateDocx`](crate::bus) over the bus.
 
 mod error;
 
 #[cfg(feature = "docx")]
 pub mod docx;
+
+#[cfg(feature = "module")]
+pub mod bus;
 
 pub use error::{Error, Result};
