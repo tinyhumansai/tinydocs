@@ -24,6 +24,7 @@ exclude = [
 [workspace]
 members = ["crates/tinydocs-module"]
 default-members = [".", "crates/tinydocs-module"]
+exclude = ["vendor/tinybus"]
 resolver = "3"
 
 [dependencies]
