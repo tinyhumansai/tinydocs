@@ -352,7 +352,8 @@ jobs:
           REPOSITORY: ${{ github.repository }}
         run: |
           set -euo pipefail
-          gh release create "$RELEASE_TAG" release-assets/* \
+          mapfile -t release_files < <(find release-assets -type f | sort)
+          gh release create "$RELEASE_TAG" "${release_files[@]}" \
             --repo "$REPOSITORY" \
             --verify-tag \
             --title "$RELEASE_TAG" \
