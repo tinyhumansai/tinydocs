@@ -24,7 +24,10 @@
 //! # Layout
 //!
 //! - [`error`](self::Error) — the crate-wide [`Error`] and [`Result`].
-#![cfg_attr(feature = "docx", doc = "- [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis.")]
+#![cfg_attr(
+    feature = "docx",
+    doc = "- [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis."
+)]
 #![cfg_attr(
     not(feature = "docx"),
     doc = "- `docx` (disabled in this build) — `.docx` (OOXML `WordprocessingML`) synthesis."
