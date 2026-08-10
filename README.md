@@ -68,6 +68,25 @@ multi-hundred-megabyte document in memory.
 `DocumentSpec::validate` is public and runs before any synthesis, so a host can
 reject a bad tool call at its own boundary without paying for a blocking hop.
 
+## The spec is separable from the codec
+
+Every spec type, every limit, and every `validate` lives in `tinydocs::spec`,
+which depends on nothing but `serde` and the crate's own error type. It is
+compiled in **every** build, including `--no-default-features`, so:
+
+```toml
+tinydocs = { version = "0.1", default-features = false }
+```
+
+gives a host the authoritative wire contract and its validation without pulling
+in a single format writer. That is what a host does when synthesis happens
+somewhere else — in another process, or behind the TinyBus module below — and it
+is why such a host does not have to re-declare the spec and let it drift.
+
+The format modules re-export what they consume, so `tinydocs::docx::DocumentSpec`
+and `tinydocs::spec::DocumentSpec` name the same type and existing code keeps
+compiling.
+
 ## TinyBus module
 
 The private `tinydocs-module` workspace crate builds TinyDocs as a trusted
@@ -120,9 +139,12 @@ src/
 ├── error/
 │   ├── mod.rs          # crate-wide `Error` and `Result<T>`
 │   └── test.rs
+├── spec/               # wire contracts — ungated, serde only
+│   ├── mod.rs          # re-export surface
+│   ├── document.rs     # `DocumentSpec`, `DocumentSection`, limits, `validate`
+│   └── test.rs
 ├── docx/
-    ├── mod.rs          # `generate` + spec validation
-    ├── types.rs        # `DocumentSpec`, `DocumentSection`, limits
+    ├── mod.rs          # `generate` — the OOXML mapping
     └── test.rs
 tests/
 └── public_api.rs       # integration tests against the public API only

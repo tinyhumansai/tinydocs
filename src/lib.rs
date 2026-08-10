@@ -24,6 +24,9 @@
 //! # Layout
 //!
 //! - [`error`](self::Error) — the crate-wide [`Error`] and [`Result`].
+//! - [`spec`] — the typed document specs and their validation. Compiled in
+//!   every build, including `--no-default-features`, so a host whose synthesis
+//!   happens elsewhere still shares one definition of the wire contract.
 #![cfg_attr(
     feature = "docx",
     doc = "- [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis."
@@ -61,6 +64,8 @@
 //!   the whole OOXML writer stack.
 
 mod error;
+
+pub mod spec;
 
 #[cfg(feature = "docx")]
 pub mod docx;

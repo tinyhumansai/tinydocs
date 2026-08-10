@@ -27,9 +27,10 @@
 //! Whitespace-only paragraphs and bullets are trimmed away rather than
 //! emitting an empty run.
 
-mod types;
-
-pub use types::{
+// The spec is defined in `crate::spec`, which is compiled in every build so a
+// host can share the wire contract without the OOXML writer stack. Re-exported
+// here so `tinydocs::docx::DocumentSpec` keeps naming the same type.
+pub use crate::spec::{
     DocumentSection, DocumentSpec, MAX_BULLETS_PER_SECTION, MAX_PARAGRAPH_CHARS,
     MAX_PARAGRAPHS_PER_SECTION, MAX_SECTIONS, MAX_TEXT_CHARS, MAX_TOTAL_CHARS,
 };
@@ -53,124 +54,6 @@ const TITLE_SIZE_HALF_PT: usize = 56;
 const HEADING_SIZE_HALF_PT: usize = 32;
 /// Run font size for the author byline, in half-points (12 pt).
 const AUTHOR_SIZE_HALF_PT: usize = 24;
-
-impl DocumentSpec {
-    /// Check the spec against every documented size limit.
-    ///
-    /// Callers do not have to invoke this: [`generate`] validates before it
-    /// synthesises anything. It is public so a host can reject a malformed
-    /// spec at its own boundary — an LLM tool call, say — and hand back the
-    /// structured [`Error::InvalidInput`] before paying for a blocking hop.
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::InvalidInput`] naming the first field that violates a
-    /// limit. Fields are checked in spec order (title, author, sections, then
-    /// each section's contents) so the reported field is stable for a given
-    /// spec.
-    pub fn validate(&self) -> Result<()> {
-        if self.title.trim().is_empty() {
-            return Err(Error::invalid_input("title", "must not be empty"));
-        }
-        if self.title.chars().count() > MAX_TEXT_CHARS {
-            return Err(Error::invalid_input(
-                "title",
-                format!("must be ≤ {MAX_TEXT_CHARS} chars"),
-            ));
-        }
-        // Running total across every renderable field — title, author, and all
-        // section contents — checked as each field is processed. A spec can pass
-        // every per-field limit yet blow the aggregate budget, and checking
-        // incrementally rejects it as soon as the budget is crossed without a
-        // second pass over the whole spec.
-        let over_budget = || {
-            Error::invalid_input(
-                "sections",
-                format!("total document text must be ≤ {MAX_TOTAL_CHARS} chars"),
-            )
-        };
-        let mut total = self.title.chars().count();
-        if let Some(author) = self.author.as_deref() {
-            if author.chars().count() > MAX_TEXT_CHARS {
-                return Err(Error::invalid_input(
-                    "author",
-                    format!("must be ≤ {MAX_TEXT_CHARS} chars"),
-                ));
-            }
-            total = total.saturating_add(author.chars().count());
-        }
-        if self.sections.is_empty() {
-            return Err(Error::invalid_input(
-                "sections",
-                "must contain at least one section",
-            ));
-        }
-        if self.sections.len() > MAX_SECTIONS {
-            return Err(Error::invalid_input(
-                "sections",
-                format!("must contain ≤ {MAX_SECTIONS} sections"),
-            ));
-        }
-
-        for (i, section) in self.sections.iter().enumerate() {
-            if section.is_blank() {
-                return Err(Error::invalid_input(
-                    format!("sections[{i}]"),
-                    "must have at least one of heading / paragraphs / bullets",
-                ));
-            }
-            if let Some(heading) = section.heading.as_deref() {
-                if heading.chars().count() > MAX_TEXT_CHARS {
-                    return Err(Error::invalid_input(
-                        format!("sections[{i}].heading"),
-                        format!("must be ≤ {MAX_TEXT_CHARS} chars"),
-                    ));
-                }
-                total = total.saturating_add(heading.chars().count());
-                if total > MAX_TOTAL_CHARS {
-                    return Err(over_budget());
-                }
-            }
-            if section.paragraphs.len() > MAX_PARAGRAPHS_PER_SECTION {
-                return Err(Error::invalid_input(
-                    format!("sections[{i}].paragraphs"),
-                    format!("must contain ≤ {MAX_PARAGRAPHS_PER_SECTION} paragraphs"),
-                ));
-            }
-            for (p, paragraph) in section.paragraphs.iter().enumerate() {
-                if paragraph.chars().count() > MAX_PARAGRAPH_CHARS {
-                    return Err(Error::invalid_input(
-                        format!("sections[{i}].paragraphs[{p}]"),
-                        format!("must be ≤ {MAX_PARAGRAPH_CHARS} chars"),
-                    ));
-                }
-                total = total.saturating_add(paragraph.chars().count());
-                if total > MAX_TOTAL_CHARS {
-                    return Err(over_budget());
-                }
-            }
-            if section.bullets.len() > MAX_BULLETS_PER_SECTION {
-                return Err(Error::invalid_input(
-                    format!("sections[{i}].bullets"),
-                    format!("must contain ≤ {MAX_BULLETS_PER_SECTION} bullets"),
-                ));
-            }
-            for (b, bullet) in section.bullets.iter().enumerate() {
-                if bullet.chars().count() > MAX_PARAGRAPH_CHARS {
-                    return Err(Error::invalid_input(
-                        format!("sections[{i}].bullets[{b}]"),
-                        format!("must be ≤ {MAX_PARAGRAPH_CHARS} chars"),
-                    ));
-                }
-                total = total.saturating_add(bullet.chars().count());
-                if total > MAX_TOTAL_CHARS {
-                    return Err(over_budget());
-                }
-            }
-        }
-        Ok(())
-    }
-}
 
 /// Validate `spec` and synthesise it into `.docx` bytes.
 ///
