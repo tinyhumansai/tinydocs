@@ -13,13 +13,36 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 # The pure document library remains independently publishable and bus-agnostic.
-tinydocs = { path = "../..", default-features = false, features = ["docx"] }
+tinydocs = { path = "../..", default-features = false, features = ["docx", "pptx", "pdf"] }
 # TinyBus provides the typed service interface and dynamic module host ABI.
 tinybus = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus", default-features = false, features = ["macros", "modules"] }
 # The module-side SDK owns its runtime and exports the stable C entrypoints.
 tinybus-module = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus-module" }
 # Module methods move CPU-bound document synthesis onto Tokio's blocking pool.
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
+# Bus frames are JSON, where a byte array costs ~3.5 bytes per byte. Chunks are
+# base64 (1.34x) so a 4 MiB chunk fits a frame with room to spare.
+base64 = "0.22"
+# Chunked transfer verifies each assembled blob against a caller-declared digest
+# before it becomes readable, so a truncated upload cannot be consumed as whole.
+sha2 = "0.10"
+# The staging area's refusals are a taxonomy the caller matches on.
+thiserror = "2"
+# An output id is the only authorisation to read that output — a method receives
+# no caller identity — so ids are 128 bits of OS randomness rather than a
+# guessable counter.
+getrandom = "0.3"
+# `BlobRef` and the wire deck shape are the bus contract, so they derive the
+# same serde surface the library specs do.
+serde = { version = "1", features = ["derive"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+# The loader E2E test speaks the base64 transfer surface the same way a host does.
+base64 = "0.22"
+# `GeneratePptx` takes a deck whose images name staged blobs; the test builds that
+# document directly rather than depending on the module's own wire types, so a
+# rename here would be caught as a contract change.
+serde_json = "1"

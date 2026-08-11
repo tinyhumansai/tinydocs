@@ -38,6 +38,26 @@ serde = { version = "1", features = ["derive"] }
 # OOXML `.docx` synthesis. Optional: exclusive to the `docx` feature so a host
 # that only needs extraction does not pull the writer stack.
 docx-rs = { version = "0.4.20", optional = true }
+# OOXML `.pptx` synthesis. Optional: exclusive to the `pptx` feature.
+#
+# Default features are ON, and not by choice. `pdf-native` exists to export a
+# deck as PDF and pulls `pdfrs` -> `syntect` -> `yaml-rust`, which is a syntax
+# highlighter this crate never reaches — but ppt-rs 0.2.24 does not compile with
+# it off: `src/export/slide_render.rs` has an unguarded `use pdfrs::...` with no
+# `#[cfg(feature = "pdf-native")]`. Turning the feature off fails to build the
+# dependency, not our code.
+#
+# The cost is three RUSTSEC *unmaintained* advisories carried transitively,
+# ignored with justification in `deny.toml`. Revisit the moment ppt-rs fixes the
+# cfg: `default-features = false` then drops `pdfrs`, `syntect`, `yaml-rust`,
+# `bincode` and `pulldown-cmark` in one line (verified locally — the resolve
+# succeeds, only the build fails).
+ppt-rs = { version = "0.2", optional = true }
+# `.pdf` text extraction. Optional: exclusive to the `pdf` feature. It brings a
+# font and PostScript parsing stack (`lopdf`, CFF/Type1/CMap parsers) that only
+# the extraction path needs, so a host that never reads a PDF should not carry
+# it.
+pdf-extract = { version = "0.12", optional = true }
 
 [dev-dependencies]
 # `.docx` output is a zip container; the tests re-open the produced bytes and
@@ -55,9 +75,13 @@ name = "basic"
 required-features = ["docx"]
 
 [features]
-default = ["docx"]
+default = ["docx", "pptx", "pdf"]
 # `.docx` generation via `docx-rs`.
 docx = ["dep:docx-rs"]
+# `.pptx` generation via `ppt-rs`.
+pptx = ["dep:ppt-rs"]
+# `.pdf` text extraction via `pdf-extract`.
+pdf = ["dep:pdf-extract"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with
 # `-D warnings`, so anything set to "warn" here fails the build in CI.

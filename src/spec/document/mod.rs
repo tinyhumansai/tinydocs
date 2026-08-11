@@ -1,6 +1,5 @@
 //! The `.docx` document spec: the typed description a caller hands to
-//! [`generate`](super::generate), plus the size limits every spec is
-//! validated against.
+//! `docx::generate`, plus the size limits every spec is validated against.
 //!
 //! The spec is the crate's wire contract. It derives `Serialize` /
 //! `Deserialize` with `deny_unknown_fields` because the usual caller is an
@@ -11,8 +10,16 @@
 //! Limits are public consts rather than private constants so a host can quote
 //! the exact number in its own tool description and stay in lockstep with what
 //! validation actually enforces.
+//!
+//! Nothing in this module depends on the `docx` feature or on `docx-rs`: it is
+//! `serde` plus the crate error type. A host that only needs to *describe* and
+//! *validate* a document — because synthesis happens elsewhere, in another
+//! process or behind a message bus — can therefore depend on this crate with
+//! `default-features = false` and still share one definition of the contract.
 
 use serde::{Deserialize, Serialize};
+
+use crate::{Error, Result};
 
 /// Maximum number of sections a single document may contain.
 ///
@@ -131,4 +138,124 @@ impl DocumentSpec {
         }
         total
     }
+
+    /// Check the spec against every documented size limit.
+    ///
+    /// Callers do not have to invoke this: `docx::generate` validates before it
+    /// synthesises anything. It is public so a host can reject a malformed
+    /// spec at its own boundary — an LLM tool call, say — and hand back the
+    /// structured [`Error::InvalidInput`] before paying for a blocking hop, a
+    /// process boundary, or a bus round trip.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error::InvalidInput`] naming the first field that violates a
+    /// limit. Fields are checked in spec order (title, author, sections, then
+    /// each section's contents) so the reported field is stable for a given
+    /// spec.
+    pub fn validate(&self) -> Result<()> {
+        if self.title.trim().is_empty() {
+            return Err(Error::invalid_input("title", "must not be empty"));
+        }
+        if self.title.chars().count() > MAX_TEXT_CHARS {
+            return Err(Error::invalid_input(
+                "title",
+                format!("must be ≤ {MAX_TEXT_CHARS} chars"),
+            ));
+        }
+        // Running total across every renderable field — title, author, and all
+        // section contents — checked as each field is processed. A spec can pass
+        // every per-field limit yet blow the aggregate budget, and checking
+        // incrementally rejects it as soon as the budget is crossed without a
+        // second pass over the whole spec.
+        let over_budget = || {
+            Error::invalid_input(
+                "sections",
+                format!("total document text must be ≤ {MAX_TOTAL_CHARS} chars"),
+            )
+        };
+        let mut total = self.title.chars().count();
+        if let Some(author) = self.author.as_deref() {
+            if author.chars().count() > MAX_TEXT_CHARS {
+                return Err(Error::invalid_input(
+                    "author",
+                    format!("must be ≤ {MAX_TEXT_CHARS} chars"),
+                ));
+            }
+            total = total.saturating_add(author.chars().count());
+        }
+        if self.sections.is_empty() {
+            return Err(Error::invalid_input(
+                "sections",
+                "must contain at least one section",
+            ));
+        }
+        if self.sections.len() > MAX_SECTIONS {
+            return Err(Error::invalid_input(
+                "sections",
+                format!("must contain ≤ {MAX_SECTIONS} sections"),
+            ));
+        }
+
+        for (i, section) in self.sections.iter().enumerate() {
+            if section.is_blank() {
+                return Err(Error::invalid_input(
+                    format!("sections[{i}]"),
+                    "must have at least one of heading / paragraphs / bullets",
+                ));
+            }
+            if let Some(heading) = section.heading.as_deref() {
+                if heading.chars().count() > MAX_TEXT_CHARS {
+                    return Err(Error::invalid_input(
+                        format!("sections[{i}].heading"),
+                        format!("must be ≤ {MAX_TEXT_CHARS} chars"),
+                    ));
+                }
+                total = total.saturating_add(heading.chars().count());
+                if total > MAX_TOTAL_CHARS {
+                    return Err(over_budget());
+                }
+            }
+            if section.paragraphs.len() > MAX_PARAGRAPHS_PER_SECTION {
+                return Err(Error::invalid_input(
+                    format!("sections[{i}].paragraphs"),
+                    format!("must contain ≤ {MAX_PARAGRAPHS_PER_SECTION} paragraphs"),
+                ));
+            }
+            for (p, paragraph) in section.paragraphs.iter().enumerate() {
+                if paragraph.chars().count() > MAX_PARAGRAPH_CHARS {
+                    return Err(Error::invalid_input(
+                        format!("sections[{i}].paragraphs[{p}]"),
+                        format!("must be ≤ {MAX_PARAGRAPH_CHARS} chars"),
+                    ));
+                }
+                total = total.saturating_add(paragraph.chars().count());
+                if total > MAX_TOTAL_CHARS {
+                    return Err(over_budget());
+                }
+            }
+            if section.bullets.len() > MAX_BULLETS_PER_SECTION {
+                return Err(Error::invalid_input(
+                    format!("sections[{i}].bullets"),
+                    format!("must contain ≤ {MAX_BULLETS_PER_SECTION} bullets"),
+                ));
+            }
+            for (b, bullet) in section.bullets.iter().enumerate() {
+                if bullet.chars().count() > MAX_PARAGRAPH_CHARS {
+                    return Err(Error::invalid_input(
+                        format!("sections[{i}].bullets[{b}]"),
+                        format!("must be ≤ {MAX_PARAGRAPH_CHARS} chars"),
+                    ));
+                }
+                total = total.saturating_add(bullet.chars().count());
+                if total > MAX_TOTAL_CHARS {
+                    return Err(over_budget());
+                }
+            }
+        }
+        Ok(())
+    }
 }
+
+#[cfg(test)]
+mod test;
