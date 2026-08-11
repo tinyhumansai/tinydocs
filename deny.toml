@@ -7,7 +7,41 @@ all-features = true
 [advisories]
 # Fail on any crate with a security advisory or an unmaintained warning.
 # Add an entry here only with a comment explaining the exposure and the plan.
-ignore = []
+#
+# Every entry below is an *unmaintained* notice, not a vulnerability, and every
+# one arrives transitively through the two format writers. None is reachable
+# from `tinydocs::spec`, so a host that takes this crate with
+# `default-features = false` — the wire contract without a codec — pulls none of
+# them.
+#
+# Nothing here silences a vulnerability. RUSTSEC-2026-0187 (stack overflow in
+# lopdf via deeply nested PDF objects, a ~21 KB crafted file aborting the
+# process with an uncatchable SIGABRT) is *fixed*, not ignored: pdf-extract is
+# pinned to 0.12, which resolves lopdf 0.42.0.
+ignore = [
+    # yaml-rust, via ppt-rs -> pdfrs -> syntect. A YAML parser behind a syntax
+    # highlighter behind a PDF exporter — three layers from anything this crate
+    # calls, and `.pptx` synthesis never reaches it.
+    #
+    # Plan: it leaves with one line. ppt-rs's `pdf-native` default feature is
+    # what pulls `pdfrs`, but ppt-rs 0.2.24 does not compile with default
+    # features off — `src/export/slide_render.rs` has an unguarded
+    # `use pdfrs::...`. The moment that cfg is fixed upstream,
+    # `default-features = false` drops this crate, `syntect`, `bincode` and
+    # `pulldown-cmark` together. Verified locally: the resolve succeeds and the
+    # advisories clear; only ppt-rs's own build fails.
+    "RUSTSEC-2024-0320",
+    # bincode, via ppt-rs -> pdfrs -> syntect. Same subtree, same one-line fix.
+    "RUSTSEC-2025-0141",
+    # ttf-parser, via pdf-extract -> lopdf. lopdf's font parser, so it is on the
+    # extraction path rather than an unused corner — but the advisory is the
+    # author declaring the crate finished, not a defect. No alternative without
+    # replacing lopdf, which is pdf-extract's core dependency.
+    #
+    # Plan: track lopdf. It is actively maintained (0.42.0 shipped the fix for
+    # RUSTSEC-2026-0187), so a font-parser migration would come from there.
+    "RUSTSEC-2026-0192",
+]
 
 [licenses]
 # Licenses accepted for this crate and its dependencies. Keep GPL-3.0-only for
@@ -18,6 +52,10 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
+    # constant_time_eq 0.1.5, via ppt-rs -> zip 0.6.6. A public-domain
+    # dedication — strictly more permissive than the rest of this list, and it
+    # imposes no obligation on a GPL-3.0-only crate.
+    "CC0-1.0",
     "GPL-3.0-only",
     "ISC",
     "MIT",
