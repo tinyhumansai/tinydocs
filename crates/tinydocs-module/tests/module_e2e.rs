@@ -259,10 +259,16 @@ async fn refuses_a_stream_that_contradicts_the_spec(client: &Connection, target:
             b"too short",
         )
         .await;
-    assert!(
-        mismatched.is_err(),
-        "a stream shorter than the declared images should be refused"
-    );
+    // The wire name, not merely "it failed": `is_err()` alone would also pass if
+    // the call were rejected for an unrelated reason, which would hide the very
+    // check this case exists to prove.
+    match mismatched {
+        Err(tinybus::Error::MethodFailed { name, .. }) => assert_eq!(
+            name, "ai.tinyhumans.tinydocs.Error.InvalidInput",
+            "a length mismatch should be reported as invalid input"
+        ),
+        other => panic!("expected an InvalidInput refusal, got {other:?}"),
+    }
 }
 
 /// Read a held document back in chunks and verify its digest.

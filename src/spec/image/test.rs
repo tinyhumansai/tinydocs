@@ -124,6 +124,18 @@ fn a_jpeg_skips_standalone_and_non_frame_markers_before_the_frame() {
 }
 
 #[test]
+fn a_jpeg_with_a_tem_marker_before_the_frame_is_still_measured() {
+    // TEM (0xFF01) carries no length field. Reading the next two bytes as one
+    // desynchronises the walk and rejects a valid file.
+    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0x01];
+    bytes.extend_from_slice(&[0xFF, 0xC0, 0x00, 0x0B, 0x08]);
+    bytes.extend_from_slice(&33u16.to_be_bytes()); // height
+    bytes.extend_from_slice(&44u16.to_be_bytes()); // width
+    bytes.extend_from_slice(&[0x03, 0x00, 0x00, 0x00, 0xFF, 0xD9]);
+    assert_eq!(jpeg_dimensions(&bytes), Some((44, 33)));
+}
+
+#[test]
 fn format_renders_its_ooxml_name() {
     assert_eq!(ImageFormat::Png.as_str(), "PNG");
     assert_eq!(ImageFormat::Jpeg.as_str(), "JPEG");

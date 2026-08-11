@@ -159,6 +159,66 @@ fn reading_keeps_a_slow_consumer_alive() {
 }
 
 #[test]
+fn empty_reads_do_not_keep_an_output_alive() {
+    // A zero-length read costs a caller nothing and returns nothing. If it
+    // refreshed the TTL, repeating it would pin an output in the store forever
+    // without ever consuming it.
+    let store = OutputStore::new();
+    let mut now = t0();
+    let handle = store.insert(b"payload".to_vec(), now).unwrap();
+
+    // Poke it repeatedly while still inside the window. Both shapes that return
+    // nothing: a zero length, and a read at the exact end of the document.
+    for _ in 0..4 {
+        now += Duration::from_secs(30);
+        assert!(
+            store
+                .read_chunk(&handle.output_id, 0, 0, now)
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            store
+                .read_chunk(&handle.output_id, 7, 100, now)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    // Past the TTL measured from the *insert*, because none of those reads
+    // counted as activity. A real read at any point above would have kept it.
+    now += IDLE_TTL;
+    assert_eq!(
+        store.read_chunk(&handle.output_id, 0, 10, now),
+        Err(OutputError::UnknownOutput)
+    );
+}
+
+#[test]
+fn output_ids_are_unguessable() {
+    // An id is the only authorisation to read an output — a method receives no
+    // caller identity — so a sequential id would let any peer on the bus take
+    // somebody else's document.
+    let store = OutputStore::new();
+    let now = t0();
+    let ids: Vec<String> = (0u8..8)
+        .map(|i| store.insert(vec![i; 4], now).unwrap().output_id)
+        .collect();
+
+    for id in &ids {
+        assert_eq!(id.len(), 32, "expected 128 bits of hex, got {id}");
+        assert!(
+            id.bytes()
+                .all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+            "id is not lowercase hex: {id}"
+        );
+        assert!(!id.starts_with("out-"), "id is still counter-derived: {id}");
+    }
+    let unique: std::collections::HashSet<&String> = ids.iter().collect();
+    assert_eq!(unique.len(), ids.len(), "ids repeated");
+}
+
+#[test]
 fn releasing_frees_the_budget_and_is_reported_once() {
     let store = OutputStore::new();
     let now = t0();

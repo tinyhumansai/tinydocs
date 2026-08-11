@@ -100,9 +100,16 @@ fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
         }
         let marker = bytes[i + 1];
         i += 2;
-        // Standalone markers (no length field): padding fill bytes and
-        // RSTn / SOI / EOI. Skip without consuming a segment length.
-        if marker == 0xFF || marker == 0xD8 || marker == 0xD9 || (0xD0..=0xD7).contains(&marker) {
+        // Standalone markers carry no length field: padding fill bytes, TEM,
+        // RSTn, SOI and EOI. Reading the next two bytes as a length here would
+        // desynchronise the walk and reject a valid file — TEM in particular is
+        // legal before the frame header.
+        if marker == 0xFF
+            || marker == 0x01
+            || marker == 0xD8
+            || marker == 0xD9
+            || (0xD0..=0xD7).contains(&marker)
+        {
             continue;
         }
         if i + 1 >= bytes.len() {

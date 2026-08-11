@@ -28,6 +28,10 @@ base64 = "0.22"
 sha2 = "0.10"
 # The staging area's refusals are a taxonomy the caller matches on.
 thiserror = "2"
+# An output id is the only authorisation to read that output — a method receives
+# no caller identity — so ids are 128 bits of OS randomness rather than a
+# guessable counter.
+getrandom = "0.3"
 # `BlobRef` and the wire deck shape are the bus contract, so they derive the
 # same serde surface the library specs do.
 serde = { version = "1", features = ["derive"] }

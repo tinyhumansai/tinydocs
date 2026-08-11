@@ -20,7 +20,8 @@
 
 use serde::{Deserialize, Serialize};
 
-/// A slide image, as it appears on the bus: a reference to a staged blob.
+/// A slide image, as it appears on the bus: one byte range of the concatenated
+/// image stream that travels beside the call.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WireSlideImage {

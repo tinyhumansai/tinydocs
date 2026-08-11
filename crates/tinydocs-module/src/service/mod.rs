@@ -52,6 +52,7 @@ use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
 use tinybus::stream::StreamRef;
 use tinybus::{Connection, Error as BusError, Result as BusResult};
+use tinydocs::spec::presentation::MAX_IMAGE_BYTES;
 use tinydocs::spec::{DocumentSpec, PresentationSpec, SlideImage, SlideSpec};
 use tinydocs::{Error, pdf, pptx};
 
@@ -170,12 +171,29 @@ impl Documents {
         spec: WirePresentationSpec,
         images: Option<StreamRef>,
     ) -> BusResult<PresentationSpec> {
-        let expected: u64 = spec
-            .slides
-            .iter()
-            .flat_map(|slide| slide.images.iter())
-            .map(|image| image.byte_len)
-            .sum();
+        // Every length is caller-controlled, so the arithmetic is checked and
+        // each one is bounded before it is summed. `u64::MAX + 1` wraps to zero
+        // in a release build, which would let a zero-byte stream satisfy the
+        // aggregate check and then panic on the first slice.
+        let mut expected: u64 = 0;
+        for image in spec.slides.iter().flat_map(|slide| slide.images.iter()) {
+            if image.byte_len > MAX_IMAGE_BYTES as u64 {
+                return Err(BusError::MethodFailed {
+                    name: INVALID_INPUT_ERROR.to_string(),
+                    message: format!(
+                        "an image declares {} bytes, over the {MAX_IMAGE_BYTES}-byte limit",
+                        image.byte_len
+                    ),
+                });
+            }
+            expected =
+                expected
+                    .checked_add(image.byte_len)
+                    .ok_or_else(|| BusError::MethodFailed {
+                        name: INVALID_INPUT_ERROR.to_string(),
+                        message: "declared image lengths overflow".to_string(),
+                    })?;
+        }
 
         let payload = match (&images, expected) {
             (Some(stream), _) => self.read_stream(stream).await?,
@@ -203,13 +221,27 @@ impl Documents {
         for slide in spec.slides {
             let mut resolved = Vec::with_capacity(slide.images.len());
             for image in slide.images {
+                // Bounded above, so this cannot truncate; `checked_add` and a
+                // fallible slice keep the walk honest anyway rather than
+                // trusting the loop that produced `expected`.
                 let len = usize::try_from(image.byte_len).map_err(|_| BusError::MethodFailed {
                     name: INVALID_INPUT_ERROR.to_string(),
                     message: "image length is out of range".to_string(),
                 })?;
-                let end = cursor + len;
+                let end = cursor
+                    .checked_add(len)
+                    .ok_or_else(|| BusError::MethodFailed {
+                        name: INVALID_INPUT_ERROR.to_string(),
+                        message: "image offsets overflow".to_string(),
+                    })?;
+                let bytes = payload
+                    .get(cursor..end)
+                    .ok_or_else(|| BusError::MethodFailed {
+                        name: INVALID_INPUT_ERROR.to_string(),
+                        message: "declared image lengths do not fit the image stream".to_string(),
+                    })?;
                 resolved.push(
-                    SlideImage::from_bytes(payload[cursor..end].to_vec(), image.caption)
+                    SlideImage::from_bytes(bytes.to_vec(), image.caption)
                         .map_err(|error| map_error(&error))?,
                 );
                 cursor = end;

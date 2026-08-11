@@ -32,7 +32,7 @@ The private `tinydocs-module` workspace crate depends on the public library's
 `docx`, `pptx` and `pdf` features and builds as a `cdylib`. This separation keeps
 unpublished, vendored TinyBus packages out of the crates.io package manifest. The
 module claims `ai.tinyhumans.tinydocs.Documents`, serves the object path
-`/ai/tinyhumans/tinydocs/Documents`, and exports seven methods:
+`/ai/tinyhumans/tinydocs/Documents`, and exports five methods:
 
 ```text
 GenerateDocx(DocumentSpec)              -> OutputRef
@@ -60,13 +60,14 @@ Invalid input, writer failures and extraction failures use the distinct wire
 names `ai.tinyhumans.tinydocs.Error.InvalidInput`,
 `ai.tinyhumans.tinydocs.Error.GenerationFailed` and
 `ai.tinyhumans.tinydocs.Error.ExtractionFailed`. Transfer failures are grouped by
-what the caller should do next: `Error.UnknownBlob` (restart the transfer),
-`Error.TransferRefused` (a budget is full; the same request may succeed later)
-and `Error.TransferFailed` (the caller sent something wrong; re-send).
+what the caller should do next: `Error.UnknownOutput` (the document is gone;
+make the call again), `Error.OutputRefused` (a budget is full; the same request
+may succeed later) and `Error.TransferFailed` (the read was malformed, or an
+inbound stream did not complete).
 
 Synthesis and extraction are CPU-bound and run on the module runtime's blocking
-pool. The module retains no document state between calls — only staged blobs,
-each bounded and expiring.
+pool. The module retains no document state between calls — only produced documents
+waiting to be read, each bounded and expiring.
 
 This interface replaces `ai.tinyhumans.tinydocs.Docx`, which returned bytes
 inline. TinyBus forbids changing an interface in place, so the new contract took

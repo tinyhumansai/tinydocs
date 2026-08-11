@@ -33,10 +33,12 @@
 //! # Image layout
 //!
 //! Images stack in a single vertical column in the lower band of the slide,
-//! beneath the text. Each is scaled to fit its slot with its aspect ratio
-//! preserved and is centred in both axes; a slot is never upscaled past the
-//! source's natural size ratio. Every dimension below is in EMU (English Metric
-//! Units, 914,400 per inch), the unit OOXML itself uses.
+//! beneath the text. Each is scaled to fill its slot with its aspect ratio
+//! preserved and is centred in both axes. Scaling goes **both ways**: an image
+//! smaller than its slot is enlarged to touch it on one axis, which is what a
+//! deck wants — a 64×64 chart rendered at 64×64 on a ten-inch slide reads as a
+//! mistake. Every dimension below is in EMU (English Metric Units, 914,400 per
+//! inch), the unit OOXML itself uses.
 
 // The spec is defined in `crate::spec`, which is compiled in every build so a
 // host can share the wire contract without the OOXML writer stack. Re-exported

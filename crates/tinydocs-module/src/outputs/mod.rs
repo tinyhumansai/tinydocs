@@ -204,10 +204,15 @@ impl OutputStore {
         if start > output.bytes.len() {
             return Err(OutputError::ReadPastEnd);
         }
-        // Reading is what keeps an output alive: a caller working through a
-        // large document in chunks must not have it reaped mid-read.
-        output.last_read = now;
         let end = start.saturating_add(len).min(output.bytes.len());
+
+        // Only a read that returned bytes counts as activity. A zero-length
+        // read, or one at the exact end of the document, is free to issue and
+        // would otherwise refresh the TTL forever — which is a way to pin an
+        // output in the store indefinitely without ever consuming it.
+        if end > start {
+            output.last_read = now;
+        }
         Ok(output.bytes[start..end].to_vec())
     }
 
@@ -263,14 +268,36 @@ impl Inner {
             .retain(|_, output| now.saturating_duration_since(output.last_read) <= IDLE_TTL);
     }
 
-    /// Allocate an unused output id.
+    /// Allocate an unguessable output id.
     ///
-    /// A counter, not a random value: ids are opaque handles inside one process,
-    /// never authorisation tokens, and a counter makes a leaked id visible in a
-    /// log rather than looking like a secret.
+    /// An id **is** the authorisation to read and release an output, whether or
+    /// not it was designed to be: `Interface::call` hands a method no caller
+    /// identity, so the store cannot bind an output to the peer that produced
+    /// it and has nothing else to check. A counter would let any peer on the bus
+    /// read `out-3` and take somebody else's document.
+    ///
+    /// In this crate's own host that bus has exactly one client, but the module
+    /// is loadable by anyone, so the capability is 128 bits of OS randomness
+    /// rather than an assumption about the deployment. The counter is kept
+    /// alongside it purely so two ids in a log are orderable.
     fn allocate_id(&mut self) -> String {
         self.next_id = self.next_id.wrapping_add(1);
-        format!("out-{}", self.next_id)
+        let mut bytes = [0u8; 16];
+        // A failure here means the OS entropy source is unavailable, which is
+        // not a condition this module can paper over with a weaker id — fall
+        // back to the digest of the counter and the address of this store, which
+        // is at least not enumerable from outside the process.
+        if getrandom::fill(&mut bytes).is_err() {
+            let seed = format!("{:p}:{}", std::ptr::from_ref(self), self.next_id);
+            let digest = Sha256::digest(seed.as_bytes());
+            bytes.copy_from_slice(&digest[..16]);
+        }
+        let mut id = String::with_capacity(32);
+        for byte in bytes {
+            use std::fmt::Write as _;
+            let _ = write!(id, "{byte:02x}");
+        }
+        id
     }
 }
 
