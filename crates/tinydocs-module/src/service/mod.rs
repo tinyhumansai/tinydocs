@@ -45,8 +45,6 @@
 //! `provides` and leaves any others empty, so a second fully-declared interface
 //! is not expressible today.
 
-mod wire;
-
 use std::sync::Arc;
 use std::time::Instant;
 
@@ -59,7 +57,7 @@ use tinydocs::{Error, pdf, pptx};
 
 use crate::outputs::{OutputError, OutputRef, OutputStore};
 
-pub use wire::{WirePresentationSpec, WireSlideImage, WireSlideSpec};
+pub use tinydocs::spec::{WirePresentationSpec, WireSlideImage, WireSlideSpec};
 
 /// Well-known name and interface exported by the `TinyDocs` module.
 pub const BUS_NAME: &str = "ai.tinyhumans.tinydocs.Documents";

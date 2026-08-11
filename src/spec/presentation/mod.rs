@@ -334,5 +334,7 @@ impl PresentationSpec {
     }
 }
 
+pub mod wire;
+
 #[cfg(test)]
 mod test;

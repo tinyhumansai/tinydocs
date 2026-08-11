@@ -1,20 +1,22 @@
-//! Wire shapes that differ from the library spec because bytes cannot travel
-//! inline.
+//! The presentation spec as it crosses a bus, where bytes cannot travel inline.
 //!
 //! A `TinyBus` frame is a 16 MiB JSON document and a deck may legally carry
 //! 40 MiB of images, so image bytes ride a stream beside the call rather than
 //! inside it. A call has one stream and a deck has many images, so the images
 //! are concatenated in slide order and each one declares its `byte_len`; the
 //! module splits them apart and resolves each into a real
-//! [`tinydocs::spec::SlideImage`] — bytes, format and dimensions.
+//! [`super::SlideImage`] — bytes, format and dimensions.
 //!
 //! The lengths live in the spec rather than in the stream because they are what
 //! makes a truncated or over-long transfer a named rejection instead of a deck
 //! with a picture assembled from two different images.
 //!
-//! Only the presentation spec needs this treatment. A document spec is text, and
-//! its aggregate cap keeps it inside a frame, so `GenerateDocx` takes
-//! [`tinydocs::spec::DocumentSpec`] unchanged.
+//! Only the presentation spec needs this treatment. A document spec is text and
+//! its aggregate cap keeps it inside a frame, so a document crosses unchanged.
+//!
+//! Defined here rather than in the module that serves it so a host driving that
+//! module over a bus shares one definition of the shape instead of re-declaring
+//! it. Like the rest of [`crate::spec`] it is serde and nothing else.
 
 use serde::{Deserialize, Serialize};
 
@@ -31,7 +33,7 @@ pub struct WireSlideImage {
 
 /// One content slide, as it appears on the bus.
 ///
-/// Identical to [`tinydocs::spec::SlideSpec`] apart from `images`.
+/// Identical to [`super::SlideSpec`] apart from `images`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WireSlideSpec {
