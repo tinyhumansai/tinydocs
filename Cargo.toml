@@ -40,13 +40,19 @@ serde = { version = "1", features = ["derive"] }
 docx-rs = { version = "0.4.20", optional = true }
 # OOXML `.pptx` synthesis. Optional: exclusive to the `pptx` feature.
 #
-# `default-features = false` turns off `pdf-native`, which exists to export a
-# deck as PDF and pulls `pdfrs` -> `syntect` -> `yaml-rust` for the syntax
-# highlighting that feature wants. We only ever write `.pptx`, and that tail
-# carries three RUSTSEC unmaintained advisories (`yaml-rust`, `bincode`,
-# `ttf-parser`). Nothing in this crate calls the PDF exporter, so the whole
-# subtree goes.
-ppt-rs = { version = "0.2", default-features = false, optional = true }
+# Default features are ON, and not by choice. `pdf-native` exists to export a
+# deck as PDF and pulls `pdfrs` -> `syntect` -> `yaml-rust`, which is a syntax
+# highlighter this crate never reaches — but ppt-rs 0.2.24 does not compile with
+# it off: `src/export/slide_render.rs` has an unguarded `use pdfrs::...` with no
+# `#[cfg(feature = "pdf-native")]`. Turning the feature off fails to build the
+# dependency, not our code.
+#
+# The cost is three RUSTSEC *unmaintained* advisories carried transitively,
+# ignored with justification in `deny.toml`. Revisit the moment ppt-rs fixes the
+# cfg: `default-features = false` then drops `pdfrs`, `syntect`, `yaml-rust`,
+# `bincode` and `pulldown-cmark` in one line (verified locally — the resolve
+# succeeds, only the build fails).
+ppt-rs = { version = "0.2", optional = true }
 # `.pdf` text extraction. Optional: exclusive to the `pdf` feature. It brings a
 # font and PostScript parsing stack (`lopdf`, CFF/Type1/CMap parsers) that only
 # the extraction path needs, so a host that never reads a PDF should not carry
