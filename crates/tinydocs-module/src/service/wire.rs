@@ -1,11 +1,16 @@
 //! Wire shapes that differ from the library spec because bytes cannot travel
 //! inline.
 //!
-//! [`crate::blobs`] explains why: a `TinyBus` frame is a 16 MiB JSON document,
-//! and a deck may legally carry 40 MiB of images. So on the bus an image is a
-//! staged blob id, and the module resolves it into the real
-//! [`tinydocs::spec::SlideImage`] — bytes, format and dimensions — after the
-//! upload completes.
+//! A `TinyBus` frame is a 16 MiB JSON document and a deck may legally carry
+//! 40 MiB of images, so image bytes ride a stream beside the call rather than
+//! inside it. A call has one stream and a deck has many images, so the images
+//! are concatenated in slide order and each one declares its `byte_len`; the
+//! module splits them apart and resolves each into a real
+//! [`tinydocs::spec::SlideImage`] — bytes, format and dimensions.
+//!
+//! The lengths live in the spec rather than in the stream because they are what
+//! makes a truncated or over-long transfer a named rejection instead of a deck
+//! with a picture assembled from two different images.
 //!
 //! Only the presentation spec needs this treatment. A document spec is text, and
 //! its aggregate cap keeps it inside a frame, so `GenerateDocx` takes
@@ -17,8 +22,8 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct WireSlideImage {
-    /// Id of a completed blob holding the PNG or JPEG bytes.
-    pub blob_id: String,
+    /// Length of this image's bytes within the concatenated image stream.
+    pub byte_len: u64,
     /// Optional caption, rendered as a bullet beneath the image.
     #[serde(default)]
     pub caption: Option<String>,

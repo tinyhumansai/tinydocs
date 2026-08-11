@@ -1,49 +1,49 @@
 //! `TinyBus` service boundary for the document surface.
 //!
-//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting the three format
-//! operations plus the four chunked-transfer operations they depend on:
+//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting five methods:
 //!
 //! ```text
-//! BeginBlob(total_bytes, sha256)      -> blob_id
-//! PutChunk(blob_id, offset, base64)   -> bytes received so far
-//! GetChunk(blob_id, offset, len)      -> base64
-//! ReleaseBlob(blob_id)                -> ()
-//! GenerateDocx(DocumentSpec)          -> BlobRef
-//! GeneratePptx(WirePresentationSpec)  -> BlobRef
-//! ExtractText(blob_id)                -> BlobRef
+//! GenerateDocx(DocumentSpec)                        -> OutputRef
+//! GeneratePptx(WirePresentationSpec, Option<Stream>) -> OutputRef
+//! ExtractText(StreamRef)                            -> OutputRef
+//! ReadOutput(output_id, offset, len)                -> base64
+//! ReleaseOutput(output_id)                          -> ()
 //! ```
 //!
-//! # Why everything returns a `BlobRef`
+//! # Payloads in and payloads out are not symmetric
 //!
-//! See [`crate::blobs`]. A `TinyBus` frame is a 16 MiB JSON document and
-//! `Vec<u8>` serialises as an array of integers, so the real inline ceiling is a
-//! few megabytes — below a deck's legal image payload and below any `.pdf` worth
-//! extracting. Rather than have some methods return bytes inline and others not,
-//! every unbounded result is staged and read back in chunks. The caller's code
-//! path is then the same regardless of size.
+//! Inbound bytes ride a `TinyBus` stream: the caller opens one alongside the
+//! method call, writes while the call is outstanding, and the module reads it.
+//! Flow control, the size cap, the idle timeout and the "only the peer that
+//! opened it may write" rule are all the bus's, which is why nothing in this
+//! crate re-implements them.
+//!
+//! Replies cannot do that. `Interface::call` gets a member name and a JSON body —
+//! no caller identity, no connection — so a served object cannot open a stream
+//! back to whoever called it. A produced document is therefore held in
+//! [`crate::outputs`] and pulled with `ReadOutput`, because returning it inline
+//! would put it through a 16 MiB JSON frame where a `Vec<u8>` costs about 3.5
+//! bytes per byte. A reply-stream seam in `TinyBus` would remove that half.
+//!
+//! # Slide images arrive as one stream
+//!
+//! A deck can carry several images, and a call has one stream. Rather than stage
+//! each image separately, the wire spec gives every image a `byte_len` and the
+//! images are concatenated into a single stream in slide order; the module splits
+//! them back apart. The lengths are part of the spec, so a truncated or
+//! over-long stream is a named rejection rather than a deck with a corrupt
+//! picture in it.
 //!
 //! # This replaces the `Docx` interface rather than extending it
 //!
-//! The previous interface, `ai.tinyhumans.tinydocs.Docx`, returned
-//! `GenerateDocx(DocumentSpec) -> Vec<u8>` inline. `TinyBus`'s module guidance is
-//! explicit that an existing interface must not change in place — a breaking
-//! contract gets a new interface name — and returning a `BlobRef` where callers
-//! expect bytes is exactly that. Hence a new name.
+//! The previous interface returned `GenerateDocx(DocumentSpec) -> Vec<u8>`
+//! inline. `TinyBus` is explicit that an existing interface must not change in
+//! place, and returning a handle where callers expect bytes is exactly that.
 //!
-//! The old interface is retired rather than served alongside, because
+//! The old interface is retired rather than served beside the new one because
 //! `module_export!` attaches its `methods` list to the *first* entry in
-//! `provides` and leaves any others with an empty method list. A second
-//! fully-declared interface is therefore not expressible today, and a manifest
-//! that under-declares its members would break the invariant that manifest
-//! methods and dispatch members stay identical. Serving both needs a `TinyBus`
-//! change first; retiring one at a pre-1.0 minor bump does not.
-//!
-//! # Runtime
-//!
-//! Synthesis and extraction are CPU-bound and run on the module runtime's
-//! blocking pool. The blob operations are memory copies under a short lock and
-//! run inline. The module holds no document state between calls — only staged
-//! blobs, every one of them bounded and expiring.
+//! `provides` and leaves any others empty, so a second fully-declared interface
+//! is not expressible today.
 
 mod wire;
 
@@ -52,11 +52,12 @@ use std::time::Instant;
 
 use base64::Engine as _;
 use base64::engine::general_purpose::STANDARD as BASE64;
+use tinybus::stream::StreamRef;
 use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinydocs::spec::{DocumentSpec, PresentationSpec, SlideImage, SlideSpec};
 use tinydocs::{Error, pdf, pptx};
 
-use crate::blobs::{BlobError, BlobRef, BlobStore};
+use crate::outputs::{OutputError, OutputRef, OutputStore};
 
 pub use wire::{WirePresentationSpec, WireSlideImage, WireSlideSpec};
 
@@ -71,124 +72,159 @@ const GENERATION_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.GenerationFa
 const EXTRACTION_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.ExtractionFailed";
 const MODULE_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.ModuleFailed";
 const TRANSFER_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.TransferFailed";
-const TRANSFER_REFUSED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.TransferRefused";
-const UNKNOWN_BLOB_ERROR: &str = "ai.tinyhumans.tinydocs.Error.UnknownBlob";
+const OUTPUT_REFUSED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.OutputRefused";
+const UNKNOWN_OUTPUT_ERROR: &str = "ai.tinyhumans.tinydocs.Error.UnknownOutput";
 
-/// The served object. Owns the staging area; holds no document state.
+/// The served object.
+///
+/// Holds the connection, because reading an inbound stream needs one, and the
+/// produced-document store. No document state survives a call.
 struct Documents {
-    blobs: Arc<BlobStore>,
+    connection: Connection,
+    outputs: Arc<OutputStore>,
 }
 
-// The interface macro rejects a non-async method outright, so the four transfer
-// methods below are async because the dispatch contract says so, not because they
-// await anything. `unused_async` can therefore never be actionable in this block.
+// The interface macro rejects a non-async method outright, so the two output
+// methods below are async because the dispatch contract says so, not because
+// they await anything. `unused_async` can never be actionable in this block.
 #[allow(
     clippy::unused_async,
     reason = "tinybus::interface requires every method to be `async fn`"
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinydocs.Documents")]
 impl Documents {
-    /// Reserve space for a blob of `total_bytes` that will hash to `sha256`.
-    async fn begin_blob(&self, total_bytes: u64, sha256: String) -> BusResult<String> {
-        self.blobs
-            .begin(total_bytes, &sha256, Instant::now())
-            .map_err(|error| map_blob_error(&error))
+    /// Generate a `.docx` and hold it for reading.
+    async fn generate_docx(&self, spec: DocumentSpec) -> BusResult<OutputRef> {
+        // Validated on this thread, before a blocking slot is taken: rejecting a
+        // malformed spec should not queue behind real work.
+        spec.validate().map_err(|error| map_error(&error))?;
+        let bytes = blocking(move || tinydocs::docx::generate(&spec)).await?;
+        self.hold(bytes)
     }
 
-    /// Append a base64 chunk at `offset`, returning bytes received so far.
-    async fn put_chunk(&self, blob_id: String, offset: u64, data: String) -> BusResult<u64> {
-        let decoded = decode_base64(&data)?;
-        self.blobs
-            .put_chunk(&blob_id, offset, &decoded, Instant::now())
-            .map_err(|error| map_blob_error(&error))
+    /// Generate a `.pptx`, reading its images from one concatenated stream.
+    async fn generate_pptx(
+        &self,
+        spec: WirePresentationSpec,
+        images: Option<StreamRef>,
+    ) -> BusResult<OutputRef> {
+        let resolved = self.resolve_presentation(spec, images).await?;
+        resolved.validate().map_err(|error| map_error(&error))?;
+        let bytes = blocking(move || pptx::generate(&resolved)).await?;
+        self.hold(bytes)
     }
 
-    /// Read up to `len` bytes of a complete blob at `offset`, base64-encoded.
-    async fn get_chunk(&self, blob_id: String, offset: u64, len: u64) -> BusResult<String> {
+    /// Extract the text layer of a streamed `.pdf` and hold the result.
+    async fn extract_text(&self, document: StreamRef) -> BusResult<OutputRef> {
+        let bytes = self.read_stream(&document).await?;
+        let text = blocking(move || pdf::extract_text(&bytes)).await?;
+        self.hold(text.into_bytes())
+    }
+
+    /// Read up to `len` bytes of a held document at `offset`, base64-encoded.
+    async fn read_output(&self, output_id: String, offset: u64, len: u64) -> BusResult<String> {
         let bytes = self
-            .blobs
-            .get_chunk(&blob_id, offset, len, Instant::now())
-            .map_err(|error| map_blob_error(&error))?;
+            .outputs
+            .read_chunk(&output_id, offset, len, Instant::now())
+            .map_err(|error| map_output_error(&error))?;
         Ok(BASE64.encode(bytes))
     }
 
-    /// Drop a blob and free its budget.
-    async fn release_blob(&self, blob_id: String) -> BusResult<()> {
-        self.blobs
-            .release(&blob_id, Instant::now())
-            .map_err(|error| map_blob_error(&error))
-    }
-
-    /// Generate a `.docx` and stage it for reading.
-    async fn generate_docx(&self, spec: DocumentSpec) -> BusResult<BlobRef> {
-        // Validated on this thread, before a blocking slot is taken: rejecting a
-        // malformed spec should not have to queue behind real work.
-        spec.validate().map_err(|error| map_error(&error))?;
-        let bytes = blocking(move || tinydocs::docx::generate(&spec)).await?;
-        self.stage(bytes)
-    }
-
-    /// Generate a `.pptx` from a spec whose images name staged blobs.
-    async fn generate_pptx(&self, spec: WirePresentationSpec) -> BusResult<BlobRef> {
-        let resolved = self.resolve_presentation(spec)?;
-        resolved.validate().map_err(|error| map_error(&error))?;
-        let bytes = blocking(move || pptx::generate(&resolved)).await?;
-        self.stage(bytes)
-    }
-
-    /// Extract the text layer of a staged `.pdf` and stage the result.
-    async fn extract_text(&self, blob_id: String) -> BusResult<BlobRef> {
-        // Taken rather than copied: the document is often the largest thing in
-        // the staging area, and holding it through extraction as well would
-        // double its cost for no reason.
-        let bytes = self
-            .blobs
-            .take_complete(&blob_id, Instant::now())
-            .map_err(|error| map_blob_error(&error))?;
-        let text = blocking(move || pdf::extract_text(&bytes)).await?;
-        self.stage(text.into_bytes())
+    /// Drop a held document and free its budget.
+    async fn release_output(&self, output_id: String) -> BusResult<()> {
+        self.outputs
+            .release(&output_id, Instant::now())
+            .map_err(|error| map_output_error(&error))
     }
 }
 
 impl Documents {
-    /// Stage a produced payload and return its handle.
-    fn stage(&self, bytes: Vec<u8>) -> BusResult<BlobRef> {
-        self.blobs
-            .insert_complete(bytes, Instant::now())
-            .map_err(|error| map_blob_error(&error))
+    /// Hold a produced document and return its handle.
+    fn hold(&self, bytes: Vec<u8>) -> BusResult<OutputRef> {
+        self.outputs
+            .insert(bytes, Instant::now())
+            .map_err(|error| map_output_error(&error))
     }
 
-    /// Turn a wire deck into a real [`PresentationSpec`] by consuming the blobs
-    /// its images name.
+    /// Read a whole inbound stream into memory.
     ///
-    /// Images are taken from the staging area, so a deck's bytes stop being
-    /// charged twice the moment they are resolved. A blob that is missing or
-    /// incomplete fails the whole call rather than silently dropping a slide's
-    /// image — the caller staged it, so its absence is a transfer bug worth
-    /// reporting, not a degraded deck.
-    fn resolve_presentation(&self, spec: WirePresentationSpec) -> BusResult<PresentationSpec> {
-        let now = Instant::now();
+    /// The bus enforces the size cap, the flow-control window and the idle
+    /// timeout; a failure here is a transfer that did not complete.
+    async fn read_stream(&self, stream: &StreamRef) -> BusResult<Vec<u8>> {
+        self.connection
+            .read_stream(stream)
+            .await
+            .map_err(|error| BusError::MethodFailed {
+                name: TRANSFER_FAILED_ERROR.to_string(),
+                // The bus's own message, which never carries payload bytes.
+                message: error.to_string(),
+            })
+    }
+
+    /// Turn a wire deck plus one concatenated image stream into a real spec.
+    ///
+    /// The spec's `byte_len` values are the authority on where each image ends.
+    /// A stream that does not add up to their sum is refused rather than sliced
+    /// into whatever happens to be there: the alternative is a deck containing a
+    /// picture assembled from two different images.
+    async fn resolve_presentation(
+        &self,
+        spec: WirePresentationSpec,
+        images: Option<StreamRef>,
+    ) -> BusResult<PresentationSpec> {
+        let expected: u64 = spec
+            .slides
+            .iter()
+            .flat_map(|slide| slide.images.iter())
+            .map(|image| image.byte_len)
+            .sum();
+
+        let payload = match (&images, expected) {
+            (Some(stream), _) => self.read_stream(stream).await?,
+            // No stream is only coherent with no images.
+            (None, 0) => Vec::new(),
+            (None, _) => {
+                return Err(BusError::MethodFailed {
+                    name: INVALID_INPUT_ERROR.to_string(),
+                    message: "the deck declares images but no image stream was opened".to_string(),
+                });
+            }
+        };
+        if payload.len() as u64 != expected {
+            return Err(BusError::MethodFailed {
+                name: INVALID_INPUT_ERROR.to_string(),
+                message: format!(
+                    "image stream carried {} bytes but the deck declares {expected}",
+                    payload.len()
+                ),
+            });
+        }
+
+        let mut cursor = 0usize;
         let mut slides = Vec::with_capacity(spec.slides.len());
         for slide in spec.slides {
-            let mut images = Vec::with_capacity(slide.images.len());
+            let mut resolved = Vec::with_capacity(slide.images.len());
             for image in slide.images {
-                let bytes = self
-                    .blobs
-                    .take_complete(&image.blob_id, now)
-                    .map_err(|error| map_blob_error(&error))?;
-                images.push(
-                    SlideImage::from_bytes(bytes, image.caption)
+                let len = usize::try_from(image.byte_len).map_err(|_| BusError::MethodFailed {
+                    name: INVALID_INPUT_ERROR.to_string(),
+                    message: "image length is out of range".to_string(),
+                })?;
+                let end = cursor + len;
+                resolved.push(
+                    SlideImage::from_bytes(payload[cursor..end].to_vec(), image.caption)
                         .map_err(|error| map_error(&error))?,
                 );
+                cursor = end;
             }
             slides.push(SlideSpec {
                 title: slide.title,
                 body: slide.body,
                 bullets: slide.bullets,
                 speaker_notes: slide.speaker_notes,
-                images,
+                images: resolved,
             });
         }
+
         Ok(PresentationSpec {
             title: spec.title,
             author: spec.author,
@@ -213,16 +249,6 @@ where
         .map_err(|error| map_error(&error))
 }
 
-/// Decode a base64 chunk, refusing malformed input by name.
-fn decode_base64(data: &str) -> BusResult<Vec<u8>> {
-    BASE64.decode(data).map_err(|_| BusError::MethodFailed {
-        name: INVALID_INPUT_ERROR.to_string(),
-        // The payload itself is never echoed: it is caller data, and an error
-        // message is the wrong place for it.
-        message: "chunk data is not valid base64".to_string(),
-    })
-}
-
 /// Map a library error onto its wire name.
 fn map_error(error: &Error) -> BusError {
     let name = match error {
@@ -237,24 +263,19 @@ fn map_error(error: &Error) -> BusError {
     }
 }
 
-/// Map a staging failure onto its wire name.
+/// Map an output-store failure onto its wire name.
 ///
-/// Three names rather than one, because the caller's correct response differs.
-/// `UnknownBlob` means the transfer is gone and has to restart; `TransferRefused`
-/// means a budget is full and retrying later may work; `TransferFailed` means the
-/// caller sent something wrong and should re-send.
-fn map_blob_error(error: &BlobError) -> BusError {
+/// Grouped by what the caller should do next: `UnknownOutput` means the document
+/// is gone and the call has to be made again, `OutputRefused` means the store is
+/// full and the same request may succeed later, `TransferFailed` means the read
+/// itself was malformed.
+fn map_output_error(error: &OutputError) -> BusError {
     let name = match *error {
-        BlobError::UnknownBlob => UNKNOWN_BLOB_ERROR,
-        BlobError::StagingFull | BlobError::TooManyBlobs => TRANSFER_REFUSED_ERROR,
-        BlobError::MalformedDigest
-        | BlobError::BlobTooLarge
-        | BlobError::ChunkTooLarge
-        | BlobError::OutOfOrderChunk { .. }
-        | BlobError::OverlongBlob
-        | BlobError::DigestMismatch
-        | BlobError::IncompleteBlob
-        | BlobError::ReadPastEnd => TRANSFER_FAILED_ERROR,
+        OutputError::UnknownOutput => UNKNOWN_OUTPUT_ERROR,
+        OutputError::StoreFull | OutputError::TooManyOutputs | OutputError::OutputTooLarge => {
+            OUTPUT_REFUSED_ERROR
+        }
+        OutputError::ChunkTooLarge | OutputError::ReadPastEnd => TRANSFER_FAILED_ERROR,
     };
     BusError::MethodFailed {
         name: name.to_string(),
@@ -263,13 +284,12 @@ fn map_blob_error(error: &BlobError) -> BusError {
 }
 
 async fn setup(connection: Connection) -> BusResult<()> {
+    let documents = Documents {
+        connection: connection.clone(),
+        outputs: Arc::new(OutputStore::new()),
+    };
     connection
-        .serve_at(
-            OBJECT_PATH.try_into()?,
-            Documents {
-                blobs: Arc::new(BlobStore::new()),
-            },
-        )
+        .serve_at(OBJECT_PATH.try_into()?, documents)
         .await?;
     connection.request_name(BUS_NAME).await?;
     Ok(())
@@ -289,13 +309,11 @@ mod exports {
         worker_threads = 2,
         provides = ["ai.tinyhumans.tinydocs.Documents"],
         methods = [
-            "BeginBlob",
-            "PutChunk",
-            "GetChunk",
-            "ReleaseBlob",
             "GenerateDocx",
             "GeneratePptx",
             "ExtractText",
+            "ReadOutput",
+            "ReleaseOutput",
         ],
         signals = [],
         requires = [],

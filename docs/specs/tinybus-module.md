@@ -35,23 +35,26 @@ module claims `ai.tinyhumans.tinydocs.Documents`, serves the object path
 `/ai/tinyhumans/tinydocs/Documents`, and exports seven methods:
 
 ```text
-BeginBlob(total_bytes, sha256)       -> blob_id
-PutChunk(blob_id, offset, base64)    -> bytes received so far
-GetChunk(blob_id, offset, len)       -> base64
-ReleaseBlob(blob_id)                 -> ()
-GenerateDocx(DocumentSpec)           -> BlobRef
-GeneratePptx(deck with image blobs)  -> BlobRef
-ExtractText(blob_id)                 -> BlobRef
+GenerateDocx(DocumentSpec)              -> OutputRef
+GeneratePptx(deck, Option<StreamRef>)   -> OutputRef
+ExtractText(StreamRef)                  -> OutputRef
+ReadOutput(output_id, offset, len)      -> base64
+ReleaseOutput(output_id)                -> ()
 ```
 
 The format arguments are the same Serde contracts used by the Rust API, except
-that a slide image names a staged blob rather than carrying bytes inline.
+that a slide image declares its length in the concatenated image stream rather
+than carrying bytes inline.
 
-No method returns bytes inline. A frame is a 16 MiB JSON document and a `Vec<u8>`
-serialises as an array of integers — about 3.5 bytes of frame per byte — so the
-real inline ceiling is a few megabytes, below both a deck's legal image payload
-and any `.pdf` worth extracting. Every unbounded value is therefore staged and
-moved in base64 chunks.
+Inbound payloads ride TinyBus streams, so flow control, the size cap and the
+idle timeout are the bus's. A deck's images share one stream because a call has
+one stream; their declared lengths are the authority on where each image ends.
+
+Replies cannot stream: `Interface::call` receives no caller identity and no
+connection, so a served object cannot open a stream back to its caller. A
+produced document is therefore held and pulled with `ReadOutput`, because a
+frame is a 16 MiB JSON document and a `Vec<u8>` serialises as an array of
+integers — about 3.5 bytes of frame per byte.
 
 Invalid input, writer failures and extraction failures use the distinct wire
 names `ai.tinyhumans.tinydocs.Error.InvalidInput`,
@@ -78,14 +81,13 @@ second fully-declared interface is not expressible without a TinyBus change.
 - No Rust value crosses the dynamic-library ABI boundary.
 - The native artifact must match the host target and TinyBus compatibility
   gate.
-- Message payloads remain subject to TinyBus's 16 MiB frame cap, which is why
-  bytes move in bounded chunks rather than inline. Path or file-descriptor
-  transfer would remove the copies and remains the better long-term answer.
-- The staging area is bounded per chunk, per blob, in total and by blob count,
-  and expires untouched blobs. A module is never unloaded, so an unbounded
-  staging area is a leak with no end.
-- A blob is verified against its declared SHA-256 before it becomes readable, so
-  a truncated or reordered transfer cannot be consumed as though it were whole.
+- Message payloads remain subject to TinyBus's 16 MiB frame cap. Inbound bytes
+  avoid it through streams; outbound bytes are pulled in bounded chunks until
+  TinyBus gains a reply-stream seam.
+- Held documents are bounded per document, in total, by count, and by an idle
+  TTL. A module is never unloaded, so an unbounded store is a leak with no end.
+- An image stream that does not match the lengths the deck declares is refused,
+  so a truncated transfer cannot become a deck with a corrupt picture in it.
 - Dynamic modules are trusted code with the host process's privileges.
 
 ## Acceptance criteria
@@ -108,9 +110,12 @@ second fully-declared interface is not expressible without a TinyBus change.
 
 None blocking this version.
 
-Two things belong upstream in TinyBus rather than here. The staging area is
-format-agnostic and every module that moves bytes will want it, so it is a
-candidate for the module SDK. And `module_export!` attaching its method list only
-to the first provided interface is what forces one interface to carry both the
-transfer and the format methods; per-interface method lists would allow the
-cleaner split.
+Two things belong upstream in TinyBus rather than here.
+
+A reply-stream seam would delete the output store entirely: the only reason a
+produced document is held at all is that a served object cannot open a stream
+back to its caller.
+
+And `module_export!` attaching its method list only to the first provided
+interface is what forces one interface to carry both the output methods and the
+format methods; per-interface method lists would allow the cleaner split.

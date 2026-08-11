@@ -125,41 +125,41 @@ The native artifact is `target/release/libtinydocs_module.so` on Linux,
 `libtinydocs_module.dylib` on macOS, or `tinydocs_module.dll` on Windows. Load
 it with a TinyBus host built with its `modules` feature. It claims
 `ai.tinyhumans.tinydocs.Documents` at `/ai/tinyhumans/tinydocs/Documents` and
-exposes the three format operations plus the chunked transfer they depend on:
+exposes:
 
 ```text
-BeginBlob(total_bytes, sha256)       -> blob_id
-PutChunk(blob_id, offset, base64)    -> bytes received so far
-GetChunk(blob_id, offset, len)       -> base64
-ReleaseBlob(blob_id)                 -> ()
-GenerateDocx(DocumentSpec)           -> BlobRef
-GeneratePptx(deck with image blobs)  -> BlobRef
-ExtractText(blob_id)                 -> BlobRef
+GenerateDocx(DocumentSpec)                         -> OutputRef
+GeneratePptx(deck, Option<StreamRef>)              -> OutputRef
+ExtractText(StreamRef)                             -> OutputRef
+ReadOutput(output_id, offset, len)                 -> base64
+ReleaseOutput(output_id)                           -> ()
 ```
 
-Nothing returns bytes inline. A TinyBus frame is a 16 MiB JSON document, and a
-`Vec<u8>` serialises as an array of integers — roughly 3.5 bytes of frame per
-byte of payload — so the real inline ceiling is a few megabytes. That is below a
-deck's legal image payload and below any `.pdf` worth extracting. So every
-unbounded value is staged and moved in base64 chunks, and a caller's code path is
-the same regardless of size.
+Payloads in and payloads out are not symmetric, and the reason is worth knowing.
 
-The staging area is bounded in four independent ways — per chunk, per blob, in
-total, and by blob count — and blobs that stop being touched expire. A module is
-trusted in-process code that TinyBus never unloads, so an abandoned upload is
-never reclaimed by a process exit that does not come.
+**Inbound bytes ride a TinyBus stream.** The caller opens one alongside the call
+and writes while the call is outstanding; flow control, the size cap, the idle
+timeout and the "only the peer that opened it may write" rule are all the bus's,
+so nothing here re-implements them. A deck's images are concatenated into a
+single stream in slide order, each declaring its `byte_len`, because a call has
+one stream and a deck has many pictures — and putting the lengths in the spec is
+what makes a truncated transfer a named rejection instead of a deck with a
+picture assembled from two different images.
+
+**Replies cannot.** `Interface::call` receives a member name and a JSON body —
+no caller identity, no connection — so a served object cannot open a stream back
+to whoever called it. A produced document is therefore held by the module and
+pulled with `ReadOutput`, because returning it inline would put it through a
+16 MiB JSON frame where a `Vec<u8>` costs about 3.5 bytes per byte. That half
+disappears the day TinyBus grows a reply-stream seam.
+
+What the module holds is bounded four ways — per document, in total, by count,
+and by an idle TTL — because TinyBus never unloads a module, so anything retained
+is retained until the process exits unless something reclaims it.
 
 This interface replaces `ai.tinyhumans.tinydocs.Docx`, which returned bytes
 inline. TinyBus's guidance is that an existing interface must not change in
 place, so the new contract took a new name.
-
-The release workflow attaches installable Linux and macOS bundles containing
-the matching TinyBus host, the TinyDocs module, a SHA-256 `modules.toml`
-allowlist, and protocol/module documentation. It also publishes
-`checksum.toml`, which TinyBus uses to verify a downloaded precompiled module
-archive, plus the crates.io package and pinned TinyBus source. TinyBus modules
-are target-specific and trusted: download the bundle matching the host, and
-install it only from a trusted release.
 
 A TinyBus host can download and verify the matching archive directly from a
 tagged GitHub release with `ModuleHost::load_github_release`; the archive must

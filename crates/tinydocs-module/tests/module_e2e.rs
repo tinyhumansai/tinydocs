@@ -1,46 +1,88 @@
 //! End-to-end test for loading the built `TinyDocs` module into `TinyBus`.
 //!
-//! This is the only test that exercises the real thing: the built `cdylib`, the
-//! ABI descriptor, manifest admission, the dynamic loader, and a broker routing
-//! actual frames. Everything else in this crate tests Rust functions directly and
-//! would keep passing if the artifact stopped loading at all.
+//! The only test that exercises the real thing: the built `cdylib`, the ABI
+//! descriptor, manifest admission, the dynamic loader, and a broker routing
+//! actual frames. Everything else in this crate calls Rust functions directly and
+//! would keep passing if the artifact stopped loading altogether.
 //!
-//! It therefore covers each of the three formats end to end, and moves an image
-//! across more than one chunk — the chunked path is the reason this interface
-//! exists, and a single-chunk transfer would not prove it works.
+//! It also carries the only honest test of the streaming paths. A stream needs
+//! two connected peers with a broker between them, so a unit test against a bare
+//! struct cannot reach one — and the payloads here are deliberately larger than a
+//! single chunk, because a one-chunk transfer would not prove the reassembly.
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use std::time::Duration;
 
+use base64::Engine as _;
 use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleState};
 use tinybus::transport::memory::MemoryBus;
 use tinydocs::spec::{DocumentSection, DocumentSpec};
-use tinydocs_module::{BUS_NAME, BlobRef, OBJECT_PATH, hex_digest};
+use tinydocs_module::{BUS_NAME, OBJECT_PATH, OutputRef, hex_digest};
 
-/// Every method the manifest must declare.
+/// Every method the manifest must declare, in order.
 const EXPECTED_METHODS: &[&str] = &[
-    "BeginBlob",
-    "PutChunk",
-    "GetChunk",
-    "ReleaseBlob",
     "GenerateDocx",
     "GeneratePptx",
     "ExtractText",
+    "ReadOutput",
+    "ReleaseOutput",
 ];
 
-/// Chunk size used by the test transfers.
+/// Chunk size for reading outputs back.
 ///
-/// Deliberately small so a modest fixture still spans several chunks. The
-/// module's own cap is megabytes; nothing here needs to approach it to prove the
-/// offsets line up.
-const TEST_CHUNK: usize = 512;
+/// Small on purpose so a modest document still takes several reads. The module's
+/// own cap is megabytes; nothing here needs to approach it to prove the offsets
+/// line up.
+const READ_CHUNK: u64 = 512;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires TINYDOCS_TEST_MODULE to point at the built cdylib"]
 async fn the_built_module_serves_every_format_over_a_real_broker() {
+    // One test rather than four: TinyBus never unloads a module and a second
+    // load of the same artifact would collide on the well-known name, so every
+    // format is exercised against the one admitted instance.
+    let (client, modules, broker_task) = admit_module();
+    let client = client.await;
+    wait_until_serving(&client).await;
+
+    let target = Target::new();
+    let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
+
+    generates_a_docx(&proxy).await;
+    generates_a_pptx_from_a_streamed_image_pair(&client, &target, &proxy).await;
+    extracts_text_from_a_streamed_pdf(&client, &target, &proxy).await;
+    refuses_a_stream_that_contradicts_the_spec(&client, &target).await;
+
+    assert!(matches!(modules.list()[0].state, ModuleState::Ready));
+    broker_task.abort();
+}
+
+/// The destination triple every streaming call needs.
+struct Target {
+    destination: tinybus::BusName,
+    path: tinybus::ObjectPath,
+    interface: tinybus::InterfaceName,
+}
+
+impl Target {
+    fn new() -> Self {
+        Self {
+            destination: tinybus::BusName::new(BUS_NAME).unwrap(),
+            path: tinybus::ObjectPath::new(OBJECT_PATH).unwrap(),
+            interface: tinybus::InterfaceName::new(BUS_NAME).unwrap(),
+        }
+    }
+}
+
+/// Load the built artifact and check its manifest against the interface.
+fn admit_module() -> (
+    impl std::future::Future<Output = Connection>,
+    ModuleHost,
+    tokio::task::JoinHandle<tinybus::Result<()>>,
+) {
     let artifact =
         std::env::var_os("TINYDOCS_TEST_MODULE").expect("TINYDOCS_TEST_MODULE must be set");
     let bus = MemoryBus::new();
@@ -65,9 +107,16 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
         "manifest methods drifted from the interface"
     );
 
-    let client = Connection::connect(bus.connect().await.unwrap())
-        .await
-        .unwrap();
+    let connect = async move {
+        Connection::connect(bus.connect().await.unwrap())
+            .await
+            .unwrap()
+    };
+    (connect, modules, broker_task)
+}
+
+/// Wait for the module to claim its well-known name.
+async fn wait_until_serving(client: &Connection) {
     tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             if client
@@ -84,11 +133,11 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     })
     .await
     .expect("module should become ready");
+}
 
-    let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
-
-    // --- .docx: text in, staged bytes out ---
-    let handle: BlobRef = proxy
+/// No inbound payload, a held document out.
+async fn generates_a_docx(proxy: &tinybus::Proxy) {
+    let handle: OutputRef = proxy
         .call(
             "GenerateDocx",
             (DocumentSpec {
@@ -103,103 +152,131 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
         )
         .await
         .expect("GenerateDocx should succeed");
-    let docx = download(&proxy, &handle).await;
+    let docx = download(proxy, &handle).await;
     assert_eq!(&docx[..2], b"PK", "a .docx is a zip container");
 
-    // --- .pptx: an image staged across several chunks, then a deck ---
-    let png = png_1x1();
-    assert!(
-        png.len() > TEST_CHUNK,
-        "the image fixture must span more than one chunk to be worth testing"
-    );
-    let image_blob = upload(&proxy, &png).await;
-    let deck: BlobRef = proxy
-        .call(
-            "GeneratePptx",
-            (serde_json::json!({
-                "title": "TinyBus E2E",
-                "slides": [{
-                    "title": "With an image",
-                    "images": [{ "blob_id": image_blob, "caption": "A chart" }],
-                }],
-            }),),
+    // Releasing a document twice reports that it is gone rather than pretending.
+    proxy
+        .call::<()>("ReleaseOutput", (handle.output_id.clone(),))
+        .await
+        .expect("releasing a held document should succeed");
+    proxy
+        .call::<()>("ReleaseOutput", (handle.output_id,))
+        .await
+        .expect_err("releasing twice should fail");
+}
+
+/// Two images concatenated into one stream, split apart by their declared
+/// lengths.
+async fn generates_a_pptx_from_a_streamed_image_pair(
+    client: &Connection,
+    target: &Target,
+    proxy: &tinybus::Proxy,
+) {
+    let first = png_padded_to(2_000);
+    let second = png_padded_to(3_000);
+    let (first_len, second_len) = (first.len(), second.len());
+    let mut payload = first;
+    payload.extend_from_slice(&second);
+
+    let deck: OutputRef = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new("GeneratePptx").unwrap(),
+            |stream| {
+                serde_json::json!([
+                    {
+                        "title": "TinyBus E2E",
+                        "slides": [{
+                            "title": "With images",
+                            "images": [
+                                { "byte_len": first_len, "caption": "First" },
+                                { "byte_len": second_len, "caption": "Second" },
+                            ],
+                        }],
+                    },
+                    stream,
+                ])
+            },
+            &payload,
         )
         .await
         .expect("GeneratePptx should succeed");
-    let pptx = download(&proxy, &deck).await;
+    let pptx = download(proxy, &deck).await;
     assert_eq!(&pptx[..2], b"PK", "a .pptx is a zip container");
+}
 
-    // --- .pdf: a staged document in, extracted text out ---
+/// A streamed document in, extracted text out.
+async fn extracts_text_from_a_streamed_pdf(
+    client: &Connection,
+    target: &Target,
+    proxy: &tinybus::Proxy,
+) {
     let pdf = pdf_with_text("Hello from the module");
-    let pdf_blob = upload(&proxy, &pdf).await;
-    let extracted: BlobRef = proxy
-        .call("ExtractText", (pdf_blob,))
+    let extracted: OutputRef = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new("ExtractText").unwrap(),
+            |stream| serde_json::json!([stream]),
+            &pdf,
+        )
         .await
         .expect("ExtractText should succeed");
-    let text = String::from_utf8(download(&proxy, &extracted).await).expect("text is utf-8");
+    let text = String::from_utf8(download(proxy, &extracted).await).expect("text is utf-8");
     assert!(
         text.contains("Hello from the module"),
         "extracted text missing content: {text:?}"
     );
-
-    // Releasing a consumed handle is reported, not silently accepted.
-    proxy
-        .call::<()>("ReleaseBlob", (handle.blob_id.clone(),))
-        .await
-        .expect("releasing a staged output should succeed");
-    proxy
-        .call::<()>("ReleaseBlob", (handle.blob_id,))
-        .await
-        .expect_err("releasing twice should fail");
-
-    assert!(matches!(modules.list()[0].state, ModuleState::Ready));
-    broker_task.abort();
 }
 
-/// Stage `bytes` over `BeginBlob` + `PutChunk`, returning the blob id.
-async fn upload(proxy: &tinybus::Proxy, bytes: &[u8]) -> String {
-    use base64::Engine as _;
-    let encoder = base64::engine::general_purpose::STANDARD;
-
-    let blob_id: String = proxy
-        .call("BeginBlob", (bytes.len() as u64, hex_digest(bytes)))
-        .await
-        .expect("BeginBlob should succeed");
-
-    let mut offset = 0usize;
-    while offset < bytes.len() {
-        let end = (offset + TEST_CHUNK).min(bytes.len());
-        let received: u64 = proxy
-            .call(
-                "PutChunk",
-                (
-                    blob_id.clone(),
-                    offset as u64,
-                    encoder.encode(&bytes[offset..end]),
-                ),
-            )
-            .await
-            .expect("PutChunk should succeed");
-        assert_eq!(received, end as u64, "server disagreed about progress");
-        offset = end;
-    }
-    blob_id
+/// The lengths in the spec are the authority.
+///
+/// A short stream must fail rather than produce a deck with a picture assembled
+/// from whatever bytes happened to arrive.
+async fn refuses_a_stream_that_contradicts_the_spec(client: &Connection, target: &Target) {
+    let mismatched: tinybus::Result<OutputRef> = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new("GeneratePptx").unwrap(),
+            |stream| {
+                serde_json::json!([
+                    {
+                        "title": "Mismatched",
+                        "slides": [{
+                            "title": "Truncated",
+                            "images": [{ "byte_len": 9_999 }],
+                        }],
+                    },
+                    stream,
+                ])
+            },
+            b"too short",
+        )
+        .await;
+    assert!(
+        mismatched.is_err(),
+        "a stream shorter than the declared images should be refused"
+    );
 }
 
-/// Read a staged blob back over `GetChunk` and verify its digest.
-async fn download(proxy: &tinybus::Proxy, handle: &BlobRef) -> Vec<u8> {
-    use base64::Engine as _;
+/// Read a held document back in chunks and verify its digest.
+async fn download(proxy: &tinybus::Proxy, handle: &OutputRef) -> Vec<u8> {
     let decoder = base64::engine::general_purpose::STANDARD;
-
     let mut out = Vec::with_capacity(usize::try_from(handle.total_bytes).unwrap_or_default());
     while (out.len() as u64) < handle.total_bytes {
         let encoded: String = proxy
             .call(
-                "GetChunk",
-                (handle.blob_id.clone(), out.len() as u64, TEST_CHUNK as u64),
+                "ReadOutput",
+                (handle.output_id.clone(), out.len() as u64, READ_CHUNK),
             )
             .await
-            .expect("GetChunk should succeed");
+            .expect("ReadOutput should succeed");
         let chunk = decoder.decode(encoded).expect("chunk is base64");
         assert!(!chunk.is_empty(), "read stalled at offset {}", out.len());
         out.extend_from_slice(&chunk);
@@ -212,11 +289,11 @@ async fn download(proxy: &tinybus::Proxy, handle: &BlobRef) -> Vec<u8> {
     out
 }
 
-/// A 1×1 PNG padded past [`TEST_CHUNK`] so its transfer spans several chunks.
+/// A 1×1 PNG padded to roughly `total` bytes.
 ///
-/// The padding rides in a trailing comment chunk, which keeps the file a valid
-/// PNG that the module will accept and measure.
-fn png_1x1() -> Vec<u8> {
+/// The padding rides in a `tEXt` chunk, which is ancillary — the file stays a
+/// valid PNG the module will accept and measure.
+fn png_padded_to(total: usize) -> Vec<u8> {
     let mut out = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
     out.extend_from_slice(&13u32.to_be_bytes());
     out.extend_from_slice(b"IHDR");
@@ -228,10 +305,11 @@ fn png_1x1() -> Vec<u8> {
     out.extend_from_slice(b"IDAT");
     out.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
 
-    // tEXt is an ancillary chunk, so a reader that does not care skips it.
-    let padding = vec![b'p'; TEST_CHUNK * 2];
+    // Chunk overhead for the tEXt chunk plus the IEND trailer that follows.
+    let overhead = 12 + 4 + 12;
+    let padding = total.saturating_sub(out.len() + overhead);
     let mut text_chunk = b"pad\0".to_vec();
-    text_chunk.extend_from_slice(&padding);
+    text_chunk.extend(std::iter::repeat_n(b'p', padding));
     out.extend_from_slice(&u32::try_from(text_chunk.len()).unwrap().to_be_bytes());
     out.extend_from_slice(b"tEXt");
     out.extend_from_slice(&text_chunk);
