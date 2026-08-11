@@ -47,7 +47,7 @@ ppt-rs = { version = "0.2.14", optional = true }
 # font and PostScript parsing stack (`lopdf`, CFF/Type1/CMap parsers) that only
 # the extraction path needs, so a host that never reads a PDF should not carry
 # it.
-pdf-extract = { version = "0.10", optional = true }
+pdf-extract = { version = "0.12", optional = true }
 
 [dev-dependencies]
 # `.docx` output is a zip container; the tests re-open the produced bytes and
