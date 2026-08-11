@@ -158,7 +158,7 @@ jobs:
             HEAD
 
       - name: Upload source packages
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: source-packages
           path: |
@@ -290,7 +290,7 @@ jobs:
 
       - name: Upload Unix module package
         if: ${{ runner.os != 'Windows' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tinydocs-module-${{ matrix.id }}
           path: ${{ steps.unix_package.outputs.archive }}
@@ -298,7 +298,7 @@ jobs:
 
       - name: Upload Windows module package
         if: ${{ runner.os == 'Windows' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: tinydocs-module-${{ matrix.id }}
           path: ${{ steps.windows_package.outputs.archive }}
@@ -318,7 +318,7 @@ jobs:
           submodules: true
 
       - name: Download workflow artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: tinydocs-module-*
           path: release-assets
