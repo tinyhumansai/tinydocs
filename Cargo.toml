@@ -42,7 +42,7 @@ docx-rs = { version = "0.4.20", optional = true }
 # its own zip/XML stack plus `syntect` and `pulldown-cmark` for a Markdown
 # front-end this crate does not use, which is precisely why it is gated — a host
 # that only generates documents should not carry a syntax highlighter.
-ppt-rs = { version = "0.2.14", optional = true }
+ppt-rs = { version = "0.2", optional = true }
 # `.pdf` text extraction. Optional: exclusive to the `pdf` feature. It brings a
 # font and PostScript parsing stack (`lopdf`, CFF/Type1/CMap parsers) that only
 # the extraction path needs, so a host that never reads a PDF should not carry
