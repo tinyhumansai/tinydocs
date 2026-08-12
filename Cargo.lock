@@ -1618,7 +1618,7 @@ dependencies = [
 
 [[package]]
 name = "tinydocs"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "docx-rs",
  "pdf-extract",
@@ -1631,7 +1631,7 @@ dependencies = [
 
 [[package]]
 name = "tinydocs-module"
-version = "0.1.12"
+version = "0.1.13"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.3.4",
