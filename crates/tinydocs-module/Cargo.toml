@@ -22,7 +22,7 @@ tinybus-module = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybu
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 # Bus frames are JSON, where a byte array costs ~3.5 bytes per byte. Chunks are
 # base64 (1.34x) so a 4 MiB chunk fits a frame with room to spare.
-base64 = "0.22"
+base64 = "0.23"
 # Chunked transfer verifies each assembled blob against a caller-declared digest
 # before it becomes readable, so a truncated upload cannot be consumed as whole.
 sha2 = "0.10"
@@ -41,7 +41,7 @@ workspace = true
 
 [dev-dependencies]
 # The loader E2E test speaks the base64 transfer surface the same way a host does.
-base64 = "0.22"
+base64 = "0.23"
 # `GeneratePptx` takes a deck whose images name staged blobs; the test builds that
 # document directly rather than depending on the module's own wire types, so a
 # rename here would be caught as a contract change.
