@@ -144,17 +144,21 @@ jobs:
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 
-      - name: Package and publish the bus contract
-        run: |
-          set -euo pipefail
-          cargo package --locked --package tinydocs-bus
-          cargo publish --locked --package tinydocs-bus
-
-      - name: Package and publish crate
-        run: |
-          set -euo pipefail
-          cargo package --locked --package tinydocs
-          cargo publish --locked --package tinydocs
+      # Neither crate is published to crates.io. Both are consumed as a git
+      # submodule by their hosts, and what a host actually loads is the module
+      # artifact this workflow builds further down, so a registry upload would
+      # be a third distribution channel nobody reads. The `cargo publish` steps
+      # that used to be here failed on a missing `CARGO_REGISTRY_TOKEN` and took
+      # the whole release with them — `native-bundles` needs this job to
+      # succeed, so a token nobody had gated every module artifact.
+      #
+      # `cargo package` stays for the bus contract: it is the check that the
+      # published manifest is packageable at all, and it is cheap. It cannot
+      # stay for `tinydocs`, which depends on `tinydocs-bus` by path — packaging
+      # rewrites a path dependency to a registry version and then looks it up,
+      # so it fails on a crate that by design will never be in the index.
+      - name: Package the bus contract
+        run: cargo package --locked --package tinydocs-bus
 
       - name: Package TinyBus source and module SDK
         run: |
@@ -172,7 +176,6 @@ jobs:
           name: source-packages
           path: |
             target/package/tinydocs-bus-${{ steps.version.outputs.next_version }}.crate
-            target/package/${{ steps.version.outputs.crate_name }}-${{ steps.version.outputs.next_version }}.crate
             target/package/tinybus-source-*.tar.gz
           if-no-files-found: error
 
