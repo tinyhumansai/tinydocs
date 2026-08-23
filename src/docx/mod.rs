@@ -27,7 +27,10 @@
 //! Whitespace-only paragraphs and bullets are trimmed away rather than
 //! emitting an empty run.
 
-pub use tinydocs_bus::docx::{
+// The spec is defined in `crate::spec`, which is compiled in every build so a
+// host can share the wire contract without the OOXML writer stack. Re-exported
+// here so `tinydocs::docx::DocumentSpec` keeps naming the same type.
+pub use crate::spec::document::{
     DocumentSection, DocumentSpec, MAX_BULLETS_PER_SECTION, MAX_PARAGRAPH_CHARS,
     MAX_PARAGRAPHS_PER_SECTION, MAX_SECTIONS, MAX_TEXT_CHARS, MAX_TOTAL_CHARS,
 };

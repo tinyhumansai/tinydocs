@@ -8,6 +8,8 @@
 *.profraw
 *.profdata
 lcov.info
+# The per-file coverage gate in AGENTS.md writes this at the repository root.
+/coverage.json
 
 # Local secrets — never commit; copy .env.example to .env
 .env

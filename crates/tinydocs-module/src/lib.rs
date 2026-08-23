@@ -4,6 +4,8 @@
 //! the independently published `tinydocs` crate. Its `cdylib` output is the
 //! target-specific binary distributed in GitHub releases.
 
+pub mod outputs;
 mod service;
 
+pub use outputs::{OutputError, OutputRef, OutputStore, hex_digest};
 pub use tinydocs_bus::*;

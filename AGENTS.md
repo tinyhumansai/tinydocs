@@ -115,7 +115,7 @@ Use standard `rustfmt` output and Rust 2024 idioms. Do not hand-format around
 
 ### Errors
 
-- One crate-wide `Error` enum in `crates/tinydocs-bus/src/error.rs`, built with
+- One crate-wide `Error` enum in `crates/tinydocs-bus/src/error/mod.rs`, built with
   `thiserror` and re-exported by `tinydocs`.
 - Fallible public functions return `Result<T>`, the re-exported crate alias.
 - Add a specific variant instead of stuffing context into a string; error
