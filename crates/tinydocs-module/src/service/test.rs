@@ -12,6 +12,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
 use tinybus::Interface;
+use tinydocs_bus::{BUS_NAME, METHODS, OBJECT_PATH, WireSlideImage, WireSlideSpec};
 
 use super::*;
 use crate::outputs::hex_digest;
@@ -73,6 +74,7 @@ async fn dispatch_members_match_the_manifest_exactly() {
         members, declared,
         "the interface impl and the module_export! methods list have drifted"
     );
+    assert_eq!(METHODS, DECLARED_METHODS);
 }
 
 #[test]

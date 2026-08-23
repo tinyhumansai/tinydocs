@@ -55,16 +55,11 @@ use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinydocs::spec::presentation::MAX_IMAGE_BYTES;
 use tinydocs::spec::{DocumentSpec, PresentationSpec, SlideImage, SlideSpec};
 use tinydocs::{Error, pdf, pptx};
+use tinydocs_bus::{BUS_NAME, OBJECT_PATH};
 
 use crate::outputs::{OutputError, OutputRef, OutputStore};
 
-pub use tinydocs::spec::{WirePresentationSpec, WireSlideImage, WireSlideSpec};
-
-/// Well-known name and interface exported by the `TinyDocs` module.
-pub const BUS_NAME: &str = "ai.tinyhumans.tinydocs.Documents";
-
-/// Object path exported by the `TinyDocs` module.
-pub const OBJECT_PATH: &str = "/ai/tinyhumans/tinydocs/Documents";
+use tinydocs_bus::WirePresentationSpec;
 
 const INVALID_INPUT_ERROR: &str = "ai.tinyhumans.tinydocs.Error.InvalidInput";
 const GENERATION_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.GenerationFailed";
@@ -88,6 +83,7 @@ struct Documents {
 // they await anything. `unused_async` can never be actionable in this block.
 #[allow(
     clippy::unused_async,
+    clippy::unused_async_trait_impl,
     reason = "tinybus::interface requires every method to be `async fn`"
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinydocs.Documents")]

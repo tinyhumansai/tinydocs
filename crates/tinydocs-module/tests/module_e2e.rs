@@ -19,17 +19,11 @@ use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleState};
 use tinybus::transport::memory::MemoryBus;
-use tinydocs::spec::{DocumentSection, DocumentSpec};
-use tinydocs_module::{BUS_NAME, OBJECT_PATH, OutputRef, hex_digest};
+use tinydocs_bus::{BUS_NAME, DocumentSection, DocumentSpec, METHODS, OBJECT_PATH, names::methods};
+use tinydocs_module::{OutputRef, hex_digest};
 
 /// Every method the manifest must declare, in order.
-const EXPECTED_METHODS: &[&str] = &[
-    "GenerateDocx",
-    "GeneratePptx",
-    "ExtractText",
-    "ReadOutput",
-    "ReleaseOutput",
-];
+const EXPECTED_METHODS: &[&str] = &METHODS;
 
 /// Chunk size for reading outputs back.
 ///
@@ -94,7 +88,6 @@ fn admit_module() -> (
     assert_eq!(loaded.name, "tinydocs-module");
     assert_eq!(loaded.manifest.bus_name.as_str(), BUS_NAME);
     assert_eq!(loaded.manifest.object_path.as_str(), OBJECT_PATH);
-
     let declared: Vec<&str> = loaded
         .manifest
         .provides
@@ -139,7 +132,7 @@ async fn wait_until_serving(client: &Connection) {
 async fn generates_a_docx(proxy: &tinybus::Proxy) {
     let handle: OutputRef = proxy
         .call(
-            "GenerateDocx",
+            methods::GENERATE_DOCX,
             (DocumentSpec {
                 title: "TinyBus E2E".to_string(),
                 author: Some("TinyDocs".to_string()),

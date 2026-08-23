@@ -65,3 +65,10 @@ fn limits_are_visible_to_consumers() {
     invalid.title = "t".repeat(docx::MAX_TEXT_CHARS + 1);
     assert!(invalid.validate().is_err());
 }
+
+#[test]
+fn document_spec_is_the_bus_contract_type() {
+    fn accepts_bus_spec(_: tinydocs_bus::spec::DocumentSpec) {}
+
+    accepts_bus_spec(spec());
+}

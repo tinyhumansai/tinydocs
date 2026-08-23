@@ -10,7 +10,24 @@
 
 use super::{PresentationSpec, SlideImage, SlideSpec, build_slides, fit_within, generate};
 use crate::Error;
-use crate::spec::image::test::png;
+
+/// Minimal PNG bytes with the requested dimensions in its `IHDR` header.
+fn png(width: u32, height: u32) -> Vec<u8> {
+    let mut out = vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A];
+    out.extend_from_slice(&13u32.to_be_bytes());
+    out.extend_from_slice(b"IHDR");
+    out.extend_from_slice(&width.to_be_bytes());
+    out.extend_from_slice(&height.to_be_bytes());
+    out.extend_from_slice(&[0x08, 0x06, 0x00, 0x00, 0x00]);
+    out.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+    out.extend_from_slice(&0u32.to_be_bytes());
+    out.extend_from_slice(b"IDAT");
+    out.extend_from_slice(&[0x00, 0x00, 0x00, 0x00]);
+    out.extend_from_slice(&0u32.to_be_bytes());
+    out.extend_from_slice(b"IEND");
+    out.extend_from_slice(&[0xAE, 0x42, 0x60, 0x82]);
+    out
+}
 
 fn slide() -> SlideSpec {
     SlideSpec {

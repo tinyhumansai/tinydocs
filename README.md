@@ -114,8 +114,13 @@ compiling.
 
 ## TinyBus module
 
+`tinydocs-bus` is the dependency-light contract crate for TinyBus hosts. It
+contains the bus identity, member names, versioning, and `DocumentSpec` types,
+but no TinyBus transport or document writer. `tinydocs` re-exports the same
+types, so existing `tinydocs::docx` callers remain source-compatible.
+
 The private `tinydocs-module` workspace crate builds TinyDocs as a trusted
-in-process TinyBus module while keeping the published library bus-agnostic:
+in-process TinyBus module:
 
 ```sh
 cargo build --release --package tinydocs-module
@@ -190,14 +195,6 @@ way, so the contract and its validation survive any combination.
 ```text
 src/
 ├── lib.rs              # crate docs + the entire public re-export surface
-├── error/
-│   ├── mod.rs          # crate-wide `Error` and `Result<T>`
-│   └── test.rs
-├── spec/               # wire contracts — ungated, serde only
-│   ├── mod.rs          # re-export surface
-│   ├── document/       # `DocumentSpec`, `DocumentSection`, limits, `validate`
-│   ├── presentation/   # `PresentationSpec`, `SlideSpec`, `SlideImage`, limits
-│   └── image/          # `ImageFormat` — PNG/JPEG sniffing + header measurement
 ├── docx/
 │   ├── mod.rs          # `generate` — the `WordprocessingML` mapping
 │   └── test.rs
@@ -210,6 +207,7 @@ src/
 tests/
 └── public_api.rs       # integration tests against the public API only
 crates/
+├── tinydocs-bus/       # TinyBus names, types, errors, and wire contract
 └── tinydocs-module/    # private TinyBus cdylib adapter + loader E2E test
 examples/
 └── basic.rs            # compiled and linted in CI

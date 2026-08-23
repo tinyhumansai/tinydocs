@@ -1,6 +1,6 @@
 [package]
 name = "tinydocs-module"
-version = "0.1.13"
+version.workspace = true
 edition = "2024"
 rust-version = "1.88"
 license = "GPL-3.0-only"
@@ -14,6 +14,8 @@ crate-type = ["rlib", "cdylib"]
 [dependencies]
 # The pure document library remains independently publishable and bus-agnostic.
 tinydocs = { path = "../..", default-features = false, features = ["docx", "pptx", "pdf"] }
+# The transport-free vocabulary shared with every TinyBus host.
+tinydocs-bus = { path = "../tinydocs-bus" }
 # TinyBus provides the typed service interface and dynamic module host ABI.
 tinybus = { version = "0.1.0", path = "../../vendor/tinybus/crates/tinybus", default-features = false, features = ["macros", "modules"] }
 # The module-side SDK owns its runtime and exports the stable C entrypoints.

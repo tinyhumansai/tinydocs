@@ -28,10 +28,13 @@ production.
 
 ## Behavior
 
-The private `tinydocs-module` workspace crate depends on the public library's
-`docx`, `pptx` and `pdf` features and builds as a `cdylib`. This separation keeps
-unpublished, vendored TinyBus packages out of the crates.io package manifest. The
-module claims `ai.tinyhumans.tinydocs.Documents`, serves the object path
+The `tinydocs-bus` workspace crate is the transport-free wire contract: bus
+identity, member names, contract version, payload types, and shared errors. A
+host can depend on it without compiling TinyBus or a format writer. The public
+`tinydocs` crate re-exports those exact values, while the private
+`tinydocs-module` crate consumes the contract directly and builds as a `cdylib`.
+This separation keeps vendored TinyBus packages out of the crates.io package
+manifest. The module claims `ai.tinyhumans.tinydocs.Documents`, serves the object path
 `/ai/tinyhumans/tinydocs/Documents`, and exports five methods:
 
 ```text
@@ -78,6 +81,9 @@ second fully-declared interface is not expressible without a TinyBus change.
 ## Invariants and constraints
 
 - The vendored TinyBus gitlink is the ABI source of truth.
+- `tinydocs-bus` contains no transport or document-generation dependency.
+- `tinydocs::docx::DocumentSpec` and `tinydocs_bus::spec::DocumentSpec` are
+  the same type, not structural copies.
 - Manifest methods and generated dispatch members must remain identical.
 - No Rust value crosses the dynamic-library ABI boundary.
 - The native artifact must match the host target and TinyBus compatibility

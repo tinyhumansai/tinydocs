@@ -32,13 +32,13 @@ This is a Rust 2024 library crate rooted at `Cargo.toml`.
 ```text
 src/
 ├── lib.rs              # crate docs + the entire public re-export surface
-├── error/mod.rs        # crate-wide `Error` and `Result<T>`
 └── <feature>/          # one directory per feature area
     ├── mod.rs          # module docs, wiring, smallest useful public API
     ├── types.rs        # substantial type definitions
     └── test.rs         # module-local unit tests
 tests/                  # integration tests against the public API only
 examples/               # runnable, compiled-in-CI usage examples
+crates/tinydocs-bus/    # TinyBus wire contract: names, payload types, errors
 crates/tinydocs-module/ # private TinyBus cdylib adapter
 vendor/tinybus/         # pinned TinyBus source; optional until wired by a project
 docs/
@@ -64,8 +64,9 @@ missing module. Prefer many small modules that each do one thing well over few
 broad ones.
 
 Keep public exports centralized in `src/lib.rs` so downstream users have one
-predictable surface. Put shared error variants in `src/error/mod.rs` and return
-the crate-wide `Result<T>` from fallible public APIs.
+predictable surface. The shared error variants live in `tinydocs-bus` because
+`DocumentSpec::validate` is an inherent method on a contract-owned type; re-
+export its `Error` and `Result<T>` from `src/lib.rs` for the primary API.
 
 ## Build And Test
 
@@ -114,8 +115,9 @@ Use standard `rustfmt` output and Rust 2024 idioms. Do not hand-format around
 
 ### Errors
 
-- One crate-wide `Error` enum in `src/error/mod.rs`, built with `thiserror`.
-- Fallible public functions return `Result<T>`, the crate alias.
+- One crate-wide `Error` enum in `crates/tinydocs-bus/src/error/mod.rs`, built with
+  `thiserror` and re-exported by `tinydocs`.
+- Fallible public functions return `Result<T>`, the re-exported crate alias.
 - Add a specific variant instead of stuffing context into a string; error
   messages are lowercase, without trailing punctuation.
 - Do not `unwrap()`, `expect()`, or `panic!` in library code paths. They are

@@ -27,6 +27,7 @@
 //! - [`spec`] — the typed document specs and their validation. Compiled in
 //!   every build, including `--no-default-features`, so a host whose synthesis
 //!   happens elsewhere still shares one definition of the wire contract.
+//! - [`Error`] and [`Result`] — the shared document and bus error contract.
 #![cfg_attr(
     feature = "docx",
     doc = "- [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis."
@@ -83,9 +84,7 @@
 //! - `pdf` (default) — `.pdf` text extraction via `pdf-extract`, which also
 //!   drops its font and `PostScript` parsing stack.
 
-mod error;
-
-pub mod spec;
+pub use tinydocs_bus::spec;
 
 #[cfg(feature = "docx")]
 pub mod docx;
@@ -96,4 +95,4 @@ pub mod pptx;
 #[cfg(feature = "pdf")]
 pub mod pdf;
 
-pub use error::{Error, Result};
+pub use tinydocs_bus::{Error, Result};
