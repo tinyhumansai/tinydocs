@@ -22,8 +22,8 @@ exclude = [
 ]
 
 [workspace]
-members = ["crates/tinydocs-module"]
-default-members = [".", "crates/tinydocs-module"]
+members = ["crates/tinydocs-bus", "crates/tinydocs-module"]
+default-members = [".", "crates/tinydocs-bus", "crates/tinydocs-module"]
 exclude = ["vendor/tinybus"]
 resolver = "3"
 
@@ -31,10 +31,9 @@ resolver = "3"
 # Derive macros for the crate-wide error type in `src/error/mod.rs`. Every
 # dependency entry should carry a comment like this one saying why it is here.
 thiserror = "2"
-# The document spec types are the wire contract a host exposes to an LLM as a
-# JSON tool schema, so they derive Serialize/Deserialize here rather than
-# forcing every host to re-declare them.
-serde = { version = "1", features = ["derive"] }
+# The dependency-light TinyBus contract owns document payload types. Re-export
+# it so existing `tinydocs::docx` callers keep using the exact same types.
+tinydocs-bus = { version = "0.1.9", path = "crates/tinydocs-bus" }
 # OOXML `.docx` synthesis. Optional: exclusive to the `docx` feature so a host
 # that only needs extraction does not pull the writer stack.
 docx-rs = { version = "0.4.20", optional = true }
@@ -43,9 +42,6 @@ docx-rs = { version = "0.4.20", optional = true }
 # `.docx` output is a zip container; the tests re-open the produced bytes and
 # assert on the OOXML parts inside.
 zip = { version = "2", default-features = false, features = ["deflate"] }
-# The spec types are a JSON wire contract; the tests assert they round-trip and
-# that unknown keys are rejected.
-serde_json = "1"
 
 # The example generates a `.docx`, so it only builds when that gate is on.
 # Without this, `--no-default-features` fails on the example rather than

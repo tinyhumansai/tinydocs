@@ -130,7 +130,9 @@ jobs:
         run: |
           set -euo pipefail
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
+          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinydocs-bus/Cargo.toml
           perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinydocs-module/Cargo.toml
+          cargo update -p tinydocs-bus --precise "$NEXT_VERSION"
           cargo update -p "$CRATE_NAME" --precise "$NEXT_VERSION"
 
       - name: Commit version bump and tag
@@ -140,12 +142,21 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock crates/tinydocs-module/Cargo.toml
+          git add Cargo.toml Cargo.lock crates/tinydocs-bus/Cargo.toml crates/tinydocs-module/Cargo.toml
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 
-      - name: Package crate
-        run: cargo package --locked --package tinydocs
+      - name: Package and publish the bus contract
+        run: |
+          set -euo pipefail
+          cargo package --locked --package tinydocs-bus
+          cargo publish --locked --package tinydocs-bus
+
+      - name: Package and publish crate
+        run: |
+          set -euo pipefail
+          cargo package --locked --package tinydocs
+          cargo publish --locked --package tinydocs
 
       - name: Package TinyBus source and module SDK
         run: |
@@ -162,6 +173,7 @@ jobs:
         with:
           name: source-packages
           path: |
+            target/package/tinydocs-bus-${{ steps.version.outputs.next_version }}.crate
             target/package/${{ steps.version.outputs.crate_name }}-${{ steps.version.outputs.next_version }}.crate
             target/package/tinybus-source-*.tar.gz
           if-no-files-found: error

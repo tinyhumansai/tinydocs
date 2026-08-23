@@ -70,8 +70,13 @@ reject a bad tool call at its own boundary without paying for a blocking hop.
 
 ## TinyBus module
 
+`tinydocs-bus` is the dependency-light contract crate for TinyBus hosts. It
+contains the bus identity, member names, versioning, and `DocumentSpec` types,
+but no TinyBus transport or document writer. `tinydocs` re-exports the same
+types, so existing `tinydocs::docx` callers remain source-compatible.
+
 The private `tinydocs-module` workspace crate builds TinyDocs as a trusted
-in-process TinyBus module while keeping the published library bus-agnostic:
+in-process TinyBus module:
 
 ```sh
 cargo build --release --package tinydocs-module
@@ -116,17 +121,14 @@ TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
 
 ```text
 src/
-├── lib.rs              # crate docs + the entire public re-export surface
-├── error/
-│   ├── mod.rs          # crate-wide `Error` and `Result<T>`
-│   └── test.rs
-├── docx/
-    ├── mod.rs          # `generate` + spec validation
-    ├── types.rs        # `DocumentSpec`, `DocumentSection`, limits
+├── lib.rs              # crate docs + the public re-export surface
+└── docx/
+    ├── mod.rs          # `generate` + spec validation + contract re-exports
     └── test.rs
 tests/
 └── public_api.rs       # integration tests against the public API only
 crates/
+├── tinydocs-bus/       # TinyBus names, version, and document payload contract
 └── tinydocs-module/    # private TinyBus cdylib adapter + loader E2E test
 examples/
 └── basic.rs            # compiled and linted in CI

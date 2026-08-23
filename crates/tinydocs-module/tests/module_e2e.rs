@@ -8,8 +8,11 @@ use tinybus::Connection;
 use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleState};
 use tinybus::transport::memory::MemoryBus;
-use tinydocs::docx::{DocumentSection, DocumentSpec};
-use tinydocs_module::{BUS_NAME, OBJECT_PATH};
+use tinydocs_bus::{
+    BUS_NAME, OBJECT_PATH,
+    docx::{DocumentSection, DocumentSpec},
+    names::methods,
+};
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 #[ignore = "requires TINYDOCS_TEST_MODULE to point at the built cdylib"]
@@ -30,7 +33,7 @@ async fn built_cdylib_loads_and_generates_a_docx_over_the_bus() {
             .provides
             .iter()
             .flat_map(|interface| interface.methods.iter())
-            .any(|method| method.as_str() == "GenerateDocx")
+            .any(|method| method.as_str() == methods::GENERATE_DOCX)
     );
 
     let client = Connection::connect(bus.connect().await.unwrap())
@@ -56,7 +59,7 @@ async fn built_cdylib_loads_and_generates_a_docx_over_the_bus() {
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
     let bytes: Vec<u8> = proxy
         .call(
-            "GenerateDocx",
+            methods::GENERATE_DOCX,
             (DocumentSpec {
                 title: "TinyBus E2E".to_string(),
                 author: Some("TinyDocs".to_string()),

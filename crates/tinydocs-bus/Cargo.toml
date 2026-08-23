@@ -1,0 +1,25 @@
+[package]
+name = "tinydocs-bus"
+version = "0.1.9"
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+description = "TinyBus wire contract for TinyDocs: names and document payload types."
+repository = "https://github.com/tinyhumansai/tinydocs"
+documentation = "https://docs.rs/tinydocs-bus"
+readme = "README.md"
+keywords = ["docx", "tinybus", "document", "agent"]
+categories = ["data-structures"]
+
+[dependencies]
+# Document specifications cross the TinyBus boundary as typed Serde payloads.
+serde = { version = "1", features = ["derive"] }
+# The contract owns structured validation and generation error variants.
+thiserror = "2"
+
+[dev-dependencies]
+# Contract tests ensure the JSON vocabulary stays compatible for bus hosts.
+serde_json = "1"
+
+[lints]
+workspace = true

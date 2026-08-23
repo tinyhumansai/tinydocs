@@ -723,10 +723,18 @@ name = "tinydocs"
 version = "0.1.9"
 dependencies = [
  "docx-rs",
+ "thiserror",
+ "tinydocs-bus",
+ "zip 2.4.2",
+]
+
+[[package]]
+name = "tinydocs-bus"
+version = "0.1.9"
+dependencies = [
  "serde",
  "serde_json",
  "thiserror",
- "zip 2.4.2",
 ]
 
 [[package]]
@@ -736,6 +744,7 @@ dependencies = [
  "tinybus",
  "tinybus-module",
  "tinydocs",
+ "tinydocs-bus",
  "tokio",
 ]
 

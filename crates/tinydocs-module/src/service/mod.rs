@@ -11,13 +11,8 @@
 
 use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinydocs::Error;
-use tinydocs::docx::{self, DocumentSpec};
-
-/// Well-known name and interface exported by the `TinyDocs` module.
-pub const BUS_NAME: &str = "ai.tinyhumans.tinydocs.Docx";
-
-/// Object path exported by the `TinyDocs` module.
-pub const OBJECT_PATH: &str = "/ai/tinyhumans/tinydocs/Docx";
+use tinydocs::docx;
+use tinydocs_bus::{BUS_NAME, OBJECT_PATH, docx::DocumentSpec};
 
 const INVALID_INPUT_ERROR: &str = "ai.tinyhumans.tinydocs.Error.InvalidInput";
 const GENERATION_FAILED_ERROR: &str = "ai.tinyhumans.tinydocs.Error.GenerationFailed";

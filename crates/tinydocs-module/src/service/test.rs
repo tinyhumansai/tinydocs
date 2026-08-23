@@ -3,6 +3,7 @@
 #![allow(clippy::unwrap_used)]
 
 use tinybus::Interface;
+use tinydocs_bus::{BUS_NAME, METHODS, OBJECT_PATH};
 
 use super::*;
 
@@ -12,10 +13,11 @@ fn service_identity_is_valid_and_dispatch_matches_the_manifest() {
     assert!(tinybus::ObjectPath::new(OBJECT_PATH).is_ok());
 
     let members = TinyDocs.members();
-    assert_eq!(
-        members,
-        &[tinybus::MemberName::new("GenerateDocx").unwrap()]
-    );
+    let published: Vec<_> = METHODS
+        .into_iter()
+        .map(|method| tinybus::MemberName::new(method).unwrap())
+        .collect();
+    assert_eq!(members, published);
 }
 
 #[test]

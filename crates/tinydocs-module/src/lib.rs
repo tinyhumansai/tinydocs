@@ -6,4 +6,4 @@
 
 mod service;
 
-pub use service::{BUS_NAME, OBJECT_PATH};
+pub use tinydocs_bus::*;

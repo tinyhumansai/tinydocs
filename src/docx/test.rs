@@ -322,26 +322,3 @@ fn generate_validates_before_synthesising() {
     s.title = String::new();
     assert!(matches!(generate(&s), Err(Error::InvalidInput { .. })));
 }
-
-#[test]
-fn spec_round_trips_through_json() {
-    let s = spec();
-    let json = serde_json::to_string(&s).expect("serialises");
-    let back: DocumentSpec = serde_json::from_str(&json).expect("deserialises");
-    assert_eq!(back, s);
-}
-
-#[test]
-fn spec_rejects_unknown_json_fields() {
-    // `deny_unknown_fields` makes a typo'd key a loud rejection rather than a
-    // silently ignored one — the whole point at an LLM tool boundary.
-    let json = r#"{"title":"T","sections":[],"titel":"typo"}"#;
-    assert!(serde_json::from_str::<DocumentSpec>(json).is_err());
-}
-
-#[test]
-fn spec_defaults_optional_fields() {
-    let s: DocumentSpec = serde_json::from_str(r#"{"title":"T"}"#).expect("deserialises");
-    assert_eq!(s.author, None);
-    assert!(s.sections.is_empty());
-}

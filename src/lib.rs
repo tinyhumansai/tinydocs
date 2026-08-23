@@ -23,7 +23,9 @@
 //!
 //! # Layout
 //!
-//! - [`error`](self::Error) — the crate-wide [`Error`] and [`Result`].
+//! - [`Error`] and [`Result`] — the shared document and bus error contract.
+//! - [`tinydocs_bus`] — the transport-free `TinyBus` vocabulary re-exported by
+//!   this crate's document API.
 #![cfg_attr(
     feature = "docx",
     doc = "- [`docx`] — `.docx` (OOXML `WordprocessingML`) synthesis."
@@ -60,9 +62,7 @@
 //! - `docx` (default) — `.docx` synthesis via `docx-rs`. Turning it off drops
 //!   the whole OOXML writer stack.
 
-mod error;
-
 #[cfg(feature = "docx")]
 pub mod docx;
 
-pub use error::{Error, Result};
+pub use tinydocs_bus::{Error, Result};
