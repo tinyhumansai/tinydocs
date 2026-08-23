@@ -129,9 +129,7 @@ jobs:
           NEXT_VERSION: ${{ steps.version.outputs.next_version }}
         run: |
           set -euo pipefail
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinydocs-bus/Cargo.toml
-          perl -0pi -e 's/(\[package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' crates/tinydocs-module/Cargo.toml
+          perl -0pi -e 's/(\[workspace\.package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
           cargo update -p tinydocs-bus --precise "$NEXT_VERSION"
           cargo update -p "$CRATE_NAME" --precise "$NEXT_VERSION"
 
@@ -142,7 +140,7 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add Cargo.toml Cargo.lock crates/tinydocs-bus/Cargo.toml crates/tinydocs-module/Cargo.toml
+          git add Cargo.toml Cargo.lock
           git commit -m "Release ${RELEASE_TAG}"
           git tag -a "${RELEASE_TAG}" -m "Release ${RELEASE_TAG}"
 

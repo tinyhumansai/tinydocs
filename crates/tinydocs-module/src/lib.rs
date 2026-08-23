@@ -8,4 +8,8 @@ pub mod outputs;
 mod service;
 
 pub use outputs::{OutputError, OutputRef, OutputStore, hex_digest};
-pub use tinydocs_bus::*;
+pub use tinydocs_bus::{
+    BUS_NAME, CONTRACT_VERSION, DocumentSection, DocumentSpec, Error, ImageFormat, METHODS,
+    OBJECT_PATH, PresentationSpec, Result, SlideImage, SlideSpec, WirePresentationSpec,
+    WireSlideImage, WireSlideSpec, is_compatible,
+};
