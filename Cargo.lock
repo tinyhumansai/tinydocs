@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "tinydocs"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "docx-rs",
  "pdf-extract",
@@ -1543,7 +1543,7 @@ dependencies = [
 
 [[package]]
 name = "tinydocs-bus"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "serde",
  "serde_json",
@@ -1552,7 +1552,7 @@ dependencies = [
 
 [[package]]
 name = "tinydocs-module"
-version = "0.1.14"
+version = "0.1.15"
 dependencies = [
  "base64 0.23.1",
  "getrandom 0.4.3",
