@@ -996,9 +996,9 @@ checksum = "439ee305def115ba05938db6eb1644ff94165c5ab5e9420d1c1bcedbba909391"
 
 [[package]]
 name = "ppt-rs"
-version = "0.2.25"
+version = "0.2.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "eecd6e36aee13fd7e01d5e12c06be703906a51a41b5b0612a1af8569b18d7df4"
+checksum = "3807337494e2f1df584a990ef0bf4afe857179d453648e443e4f3e39a60a494a"
 dependencies = [
  "pdfrs",
  "thiserror",
