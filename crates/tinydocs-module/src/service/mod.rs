@@ -332,16 +332,7 @@ async fn setup(connection: Connection) -> BusResult<()> {
     reason = "generated C ABI symbols are documented by the TinyBus module SDK"
 )]
 pub(crate) mod exports {
-    macro_rules! export_module {
-        ($($declaration:tt)*) => {
-            #[cfg(not(feature = "static-link"))]
-            tinybus_module::module_export! { $($declaration)* }
-            #[cfg(feature = "static-link")]
-            tinybus_module::module_export_static! { $($declaration)* }
-        };
-    }
-
-    export_module! {
+    tinybus_module::module_export_optional_static! {
         setup = super::setup,
         worker_threads = 2,
         provides = ["ai.tinyhumans.tinydocs.Documents"],

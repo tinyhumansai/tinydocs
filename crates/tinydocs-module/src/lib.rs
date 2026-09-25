@@ -15,6 +15,9 @@ pub mod linked {
     };
 }
 
+#[cfg(feature = "static-link")]
+pub use service::exports::linked_module;
+
 pub use outputs::{OutputError, OutputRef, OutputStore, hex_digest};
 pub use tinydocs_bus::{
     BUS_NAME, CONTRACT_VERSION, DocumentSection, DocumentSpec, Error, ImageFormat, METHODS,
