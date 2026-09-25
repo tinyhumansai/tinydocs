@@ -8,6 +8,10 @@ description = "Trusted TinyBus module adapter for TinyDocs."
 repository = "https://github.com/tinyhumansai/tinydocs"
 publish = false
 
+[features]
+# Link this adapter into a host binary without exporting the shared C names.
+static-link = []
+
 [lib]
 crate-type = ["rlib", "cdylib"]
 
