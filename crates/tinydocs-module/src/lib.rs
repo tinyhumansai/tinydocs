@@ -7,7 +7,7 @@
 pub mod outputs;
 mod service;
 
-/// Entry points for hosts that link TinyDocs into their own executable.
+/// Entry points for hosts that link `TinyDocs` into their own executable.
 #[cfg(feature = "static-link")]
 pub mod linked {
     pub use crate::service::exports::{

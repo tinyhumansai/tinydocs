@@ -83,7 +83,6 @@ struct Documents {
 // they await anything. `unused_async` can never be actionable in this block.
 #[allow(
     clippy::unused_async,
-    clippy::unused_async_trait_impl,
     reason = "tinybus::interface requires every method to be `async fn`"
 )]
 #[tinybus::interface(name = "ai.tinyhumans.tinydocs.Documents")]
