@@ -81,6 +81,8 @@ struct Documents {
 // The interface macro rejects a non-async method outright, so the two output
 // methods below are async because the dispatch contract says so, not because
 // they await anything. `unused_async` can never be actionable in this block.
+// Older Clippy releases do not define `unused_async_trait_impl`.
+#[allow(unknown_lints)]
 #[allow(
     clippy::unused_async,
     clippy::unused_async_trait_impl,
@@ -329,8 +331,8 @@ async fn setup(connection: Connection) -> BusResult<()> {
     unreachable_pub,
     reason = "generated C ABI symbols are documented by the TinyBus module SDK"
 )]
-mod exports {
-    tinybus_module::module_export! {
+pub(crate) mod exports {
+    tinybus_module::module_export_optional_static! {
         setup = super::setup,
         worker_threads = 2,
         provides = ["ai.tinyhumans.tinydocs.Documents"],
