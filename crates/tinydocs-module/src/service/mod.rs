@@ -348,5 +348,8 @@ mod exports {
     }
 }
 
+#[cfg(feature = "linked")]
+pub use exports::linked_module;
+
 #[cfg(test)]
 mod test;

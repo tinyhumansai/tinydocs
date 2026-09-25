@@ -11,6 +11,9 @@ publish = false
 [lib]
 crate-type = ["rlib", "cdylib"]
 
+[features]
+linked = []
+
 [dependencies]
 # The pure document library remains independently publishable and bus-agnostic.
 tinydocs = { path = "../..", default-features = false, features = ["docx", "pptx", "pdf"] }

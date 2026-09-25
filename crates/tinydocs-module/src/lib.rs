@@ -7,6 +7,9 @@
 pub mod outputs;
 mod service;
 
+#[cfg(feature = "linked")]
+pub use service::linked_module;
+
 pub use outputs::{OutputError, OutputRef, OutputStore, hex_digest};
 pub use tinydocs_bus::{
     BUS_NAME, CONTRACT_VERSION, DocumentSection, DocumentSpec, Error, ImageFormat, METHODS,
