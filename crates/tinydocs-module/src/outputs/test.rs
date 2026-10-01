@@ -171,17 +171,19 @@ fn empty_reads_do_not_keep_an_output_alive() {
     // nothing: a zero length, and a read at the exact end of the document.
     for _ in 0..4 {
         now += Duration::from_secs(30);
-        assert!(
+        assert_eq!(
             store
                 .read_chunk(&handle.output_id, 0, 0, now)
                 .unwrap()
-                .is_empty()
+                .len(),
+            0
         );
-        assert!(
+        assert_eq!(
             store
                 .read_chunk(&handle.output_id, 7, 100, now)
                 .unwrap()
-                .is_empty()
+                .len(),
+            0
         );
     }
 
