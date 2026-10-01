@@ -17,7 +17,7 @@ Do this once, in a single commit, before writing feature code:
 - [ ] Rename the crate references in `README.md`, `src/lib.rs`, `examples/`,
       and `tests/` (search for `rust_template` and `rust-template`).
 - [ ] Replace the placeholder `greeting` module with the first real feature
-      area, keeping the `mod.rs` / `types.rs` / `test.rs` layout.
+      area, keeping the `mod.rs` / `types.rs` / `mod_tests.rs` layout.
 - [ ] Confirm `license` and `LICENSE` match the project's intended license.
 - [ ] Update the security contact in `SECURITY.md`.
 - [ ] Replace `ROADMAP.md` with the real plan, or delete it.
@@ -35,7 +35,7 @@ src/
 └── <feature>/          # one directory per feature area
     ├── mod.rs          # module docs, wiring, smallest useful public API
     ├── types.rs        # substantial type definitions
-    └── test.rs         # module-local unit tests
+    └── mod_tests.rs     # module-local unit tests
 tests/                  # integration tests against the public API only
 examples/               # runnable, compiled-in-CI usage examples
 crates/tinydocs-bus/    # TinyBus wire contract: names, payload types, errors
@@ -50,15 +50,17 @@ docs/
 Each feature area belongs in a focused module directory under `src/`. A module
 root explains the module, wires its pieces together, and exposes the smallest
 useful API. Move substantial type definitions into `types.rs` and put
-module-local unit tests in a dedicated `test.rs`, wired from the bottom of the
+module-local unit tests in a sibling `<module>_tests.rs`, wired from the bottom of the
 module root with:
 
 ```rust
 #[cfg(test)]
-mod test;
+#[path = "mod_tests.rs"]
+mod tests;
 ```
 
-Do not accumulate inline `mod tests` blocks in implementation files, and do not
+Do not write inline `mod tests` blocks in implementation files, do not name a test
+file `test.rs`, `tests.rs` or `<module>_test.rs`, and do not
 let a general-purpose `utils.rs` or `helpers.rs` grow — those are a symptom of a
 missing module. Prefer many small modules that each do one thing well over few
 broad ones.
@@ -160,7 +162,7 @@ on every generated crate.
 
 ## Testing
 
-- Module-local unit tests live in `src/<feature>/test.rs` and may touch private
+- Module-local unit tests live in `src/<feature>/mod_tests.rs` and may touch private
   items.
 - Integration tests live in `tests/` and exercise only the public API — they are
   the regression suite for the crate's contract.
@@ -186,7 +188,7 @@ Write documentation for the reader who has never seen the code.
 
 - Every public item gets a rustdoc comment. `missing_docs` is a warning that CI
   treats as an error.
-- Start every `mod.rs` and `test.rs` with a concise module-level `//!`
+- Start every `mod.rs` and `*_tests.rs` with a concise module-level `//!`
   description.
 - `src/lib.rs` carries the crate-level overview: what the crate does, the
   primary entry points, and a short runnable example.
@@ -272,3 +274,28 @@ For automated contributors specifically:
    credentials, and never paste them into a pull request or issue.
 7. **Ask only when blocked.** Make routine judgment calls yourself; escalate
    only irreversible decisions or genuine forks with no clear default.
+
+## Tests live in `*_tests.rs` files
+
+- Unit tests are never inline. Do not write a `#[cfg(test)] mod tests { ... }`
+  block in a source file. Put the tests in a sibling `<module>_tests.rs`
+  (`mod_tests.rs` beside a `mod.rs`, `lib_tests.rs` beside `lib.rs`) and declare
+  it at the bottom of the module:
+
+  ```rust
+  #[cfg(test)]
+  #[path = "foo_tests.rs"]
+  mod tests;
+  ```
+
+- The test file starts with `use super::*;` and carries no `#[cfg(test)]` of its
+  own. It is still a child module, so it reaches private items exactly as an
+  inline module did.
+- Name test files `<module>_tests.rs`; a second group for the same module is
+  `<module>_<topic>_tests.rs`. Never `test.rs`, `tests.rs` or `<module>_test.rs`.
+- Integration tests stay in the crate's `tests/` directory.
+- OpenHuman's `scripts/externalize-inline-tests.mjs <repo-root> --write` moves
+  inline test modules out mechanically; without `--write` it only reports.
+- Existing `test.rs` and `<module>_test.rs` files predate this rule. Rename each
+  to `<module>_tests.rs` (keep its `mod` name, add the `#[path]` attribute) the
+  next time you touch it.
