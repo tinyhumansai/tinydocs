@@ -371,5 +371,5 @@ fn spec_defaults_optional_fields() {
     let s: PresentationSpec = serde_json::from_str(r#"{"title":"T"}"#).expect("deserialises");
     assert_eq!(s.author, None);
     assert_eq!(s.theme, None);
-    assert!(s.slides.is_empty());
+    assert_eq!(s.slides.len(), 0);
 }
