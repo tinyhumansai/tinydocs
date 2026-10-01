@@ -272,5 +272,5 @@ fn spec_rejects_unknown_json_fields() {
 fn spec_defaults_optional_fields() {
     let s: DocumentSpec = serde_json::from_str(r#"{"title":"T"}"#).expect("deserialises");
     assert_eq!(s.author, None);
-    assert!(s.sections.is_empty());
+    assert_eq!(s.sections.len(), 0);
 }
