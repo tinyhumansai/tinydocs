@@ -337,4 +337,5 @@ impl PresentationSpec {
 pub mod wire;
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

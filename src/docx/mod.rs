@@ -178,4 +178,5 @@ fn build(spec: &DocumentSpec) -> Docx {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

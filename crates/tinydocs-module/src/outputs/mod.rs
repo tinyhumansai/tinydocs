@@ -320,4 +320,5 @@ pub fn hex_digest(bytes: &[u8]) -> String {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

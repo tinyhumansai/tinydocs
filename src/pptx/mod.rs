@@ -276,4 +276,5 @@ fn clamp_into_box(value: u64, max: u32) -> u32 {
 }
 
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 mod test;

@@ -158,4 +158,5 @@ fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 // are the fixtures every image-carrying spec and every synthesis test needs, and
 // one honest builder beats a base64 blob copied into three files.
 #[cfg(test)]
+#[path = "mod_tests.rs"]
 pub(crate) mod test;
