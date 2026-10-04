@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::time::Duration;
+use std::{io::Write, time::Duration};
 
 use base64::Engine as _;
 use tinybus::Connection;
@@ -48,6 +48,7 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     generates_a_docx(&proxy).await;
     generates_a_pptx_from_a_streamed_image_pair(&client, &target, &proxy).await;
     extracts_text_from_a_streamed_pdf(&client, &target, &proxy).await;
+    extracts_and_renders_document_intake(&client, &target, &proxy).await;
     refuses_a_stream_that_contradicts_the_spec(&client, &target).await;
 
     assert!(matches!(modules.list()[0].state, ModuleState::Ready));
@@ -224,6 +225,95 @@ async fn extracts_text_from_a_streamed_pdf(
         text.contains("Hello from the module"),
         "extracted text missing content: {text:?}"
     );
+}
+
+/// New intake methods preserve streamed input and held output lifecycles.
+async fn extracts_and_renders_document_intake(
+    client: &Connection,
+    target: &Target,
+    proxy: &tinybus::Proxy,
+) {
+    let docx = docx_with_text("Office intake through TinyBus");
+    let spec = tinydocs_bus::ExtractDocumentSpec::new(tinydocs_bus::DocumentFormat::Docx);
+    let extracted_docx: tinydocs_bus::ExtractedDocument = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::EXTRACT_DOCUMENT).unwrap(),
+            |stream| serde_json::json!([spec, stream]),
+            &docx,
+        )
+        .await
+        .expect("DOCX intake should succeed through the module");
+    assert_eq!(extracted_docx.format, tinydocs_bus::DocumentFormat::Docx);
+    assert_eq!(extracted_docx.section_count, 1);
+    assert_eq!(extracted_docx.sections[0].source, "word/document.xml");
+    assert!(
+        extracted_docx.sections[0]
+            .text
+            .contains("Office intake through TinyBus")
+    );
+
+    let pdf = pdf_with_text("Intake provenance");
+    let spec = tinydocs_bus::ExtractDocumentSpec::new(tinydocs_bus::DocumentFormat::Pdf);
+    let extracted: tinydocs_bus::ExtractedDocument = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::EXTRACT_DOCUMENT).unwrap(),
+            |stream| serde_json::json!([spec, stream]),
+            &pdf,
+        )
+        .await
+        .unwrap();
+    assert_eq!(extracted.section_count, 1);
+    assert_eq!(extracted.sections[0].source, "page:1");
+    assert!(extracted.sections[0].text.contains("Intake provenance"));
+    let spec = tinydocs_bus::RenderPdfSpec {
+        pages: vec![1],
+        max_dimension: 128,
+        max_total_pixels: 100_000,
+        max_output_bytes: 1_000_000,
+    };
+    let rendered: tinydocs_bus::RenderedPdf = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::RENDER_PDF).unwrap(),
+            |stream| serde_json::json!([spec, stream]),
+            &pdf,
+        )
+        .await
+        .unwrap();
+    assert_eq!(rendered.page_count, 1);
+    let png = download(proxy, &rendered.pages[0].output).await;
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    proxy
+        .call::<()>(
+            methods::RELEASE_OUTPUT,
+            (rendered.pages[0].output.output_id.clone(),),
+        )
+        .await
+        .unwrap();
+}
+
+fn docx_with_text(text: &str) -> Vec<u8> {
+    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    archive
+        .start_file(
+            "word/document.xml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    write!(
+        archive,
+        "<w:document xmlns:w='w'><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    .unwrap();
+    archive.finish().unwrap().into_inner()
 }
 
 /// The lengths in the spec are the authority.

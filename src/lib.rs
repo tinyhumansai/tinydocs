@@ -74,7 +74,7 @@
 //!
 //! # Feature flags
 //!
-//! Each format is a separate gate, and every gate is on by default. Turning one
+//! Generation and PDF text extraction gates are on by default. Turning one
 //! off drops its writer and that writer's dependencies; the specs stay, so the
 //! contract and its validation survive any combination.
 //!
@@ -83,6 +83,8 @@
 //!   `syntect` and `pulldown-cmark`.
 //! - `pdf` (default) — `.pdf` text extraction via `pdf-extract`, which also
 //!   drops its font and `PostScript` parsing stack.
+//! - `intake` (optional) — bounded PDF/DOCX/PPTX/XLSX text and provenance.
+//! - `pdf-render` (optional) — selected PDF page PNGs via Hayro 0.5.
 
 pub use tinydocs_bus::spec;
 
@@ -96,3 +98,10 @@ pub mod pptx;
 pub mod pdf;
 
 pub use tinydocs_bus::{Error, Result};
+
+/// Bounded document intake with section provenance.
+#[cfg(feature = "intake")]
+pub mod intake;
+/// Selected PDF page rendering for host-owned vision/OCR.
+#[cfg(feature = "pdf-render")]
+pub mod pdf_render;

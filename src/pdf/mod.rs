@@ -87,3 +87,6 @@ pub fn extract_text(bytes: &[u8]) -> Result<String> {
 #[cfg(test)]
 #[path = "mod_tests.rs"]
 mod test;
+
+#[cfg(test)]
+pub(crate) mod fixtures;

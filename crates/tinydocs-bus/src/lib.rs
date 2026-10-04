@@ -21,3 +21,10 @@ pub use spec::{
     WirePresentationSpec, WireSlideImage, WireSlideSpec,
 };
 pub use version::{CONTRACT_VERSION, is_compatible};
+
+/// Document intake and raster output vocabulary.
+pub mod intake;
+pub use intake::{
+    DocumentFormat, DocumentSectionText, ExtractDocumentSpec, ExtractedDocument, OutputRef,
+    RenderPdfSpec, RenderedPdf, RenderedPdfPage,
+};

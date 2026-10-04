@@ -59,7 +59,16 @@ ppt-rs = { version = "0.2", optional = true }
 # it.
 pdf-extract = { version = "0.12", optional = true }
 
+# Bounded OOXML intake reads only selected XML parts, never extracts files.
+zip = { version = "8", default-features = false, features = ["deflate"], optional = true }
+# Streaming XML events avoid building attacker-controlled DOM trees.
+quick-xml = { version = "0.41", optional = true }
+# Pure Rust PDF rasterization, isolated from the default extraction build.
+hayro = { version = "0.5", optional = true }
+
 [dev-dependencies]
+# Decode raster fixtures to assert scanned-page pixels survive rendering.
+png = "0.17"
 # `.docx` output is a zip container; the tests re-open the produced bytes and
 # assert on the OOXML parts inside.
 zip = { version = "8", default-features = false, features = ["deflate"] }
@@ -82,6 +91,10 @@ docx = ["dep:docx-rs"]
 pptx = ["dep:ppt-rs"]
 # `.pdf` text extraction via `pdf-extract`.
 pdf = ["dep:pdf-extract"]
+# Bounded DOCX/PPTX/XLSX and per-page PDF text intake.
+intake = ["pdf", "dep:zip", "dep:quick-xml"]
+# Selected PDF page rendering to PNG.
+pdf-render = ["pdf", "dep:hayro"]
 
 # Lints apply to the whole crate and to every target. CI runs clippy with
 # `-D warnings`, so anything set to "warn" here fails the build in CI.

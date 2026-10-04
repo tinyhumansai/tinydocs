@@ -22,6 +22,8 @@ const DECLARED_METHODS: &[&str] = &[
     "GenerateDocx",
     "GeneratePptx",
     "ExtractText",
+    "ExtractDocument",
+    "RenderPdf",
     "ReadOutput",
     "ReleaseOutput",
 ];
@@ -271,4 +273,59 @@ async fn a_malformed_read_is_refused_by_name() {
         .await
         .expect_err("read past the end");
     assert_eq!(err.wire_name(), TRANSFER_FAILED_ERROR);
+}
+
+#[tokio::test]
+async fn rendered_pages_use_the_existing_output_lifecycle() {
+    let documents = service().await;
+    let result = documents
+        .hold_images(tinydocs::pdf_render::PdfImages {
+            page_count: 3,
+            pages: vec![tinydocs::pdf_render::PdfPageImage {
+                page: 2,
+                width: 8,
+                height: 9,
+                bytes: b"png bytes".to_vec(),
+            }],
+        })
+        .unwrap();
+    assert_eq!(result.pages[0].page, 2);
+    let output = &result.pages[0].output;
+    assert_eq!(
+        documents
+            .outputs
+            .read_chunk(&output.output_id, 0, output.total_bytes, Instant::now())
+            .unwrap(),
+        b"png bytes"
+    );
+    documents
+        .release_output(output.output_id.clone())
+        .await
+        .unwrap();
+    assert_eq!(documents.outputs.live_count(), 0);
+}
+#[tokio::test]
+async fn a_refused_raster_batch_releases_every_partial_output() {
+    let documents = service().await;
+    for _ in 0..crate::outputs::MAX_LIVE_OUTPUTS - 1 {
+        documents.hold(vec![1]).unwrap();
+    }
+    let image = || tinydocs::pdf_render::PdfPageImage {
+        page: 1,
+        width: 1,
+        height: 1,
+        bytes: vec![1],
+    };
+    assert!(
+        documents
+            .hold_images(tinydocs::pdf_render::PdfImages {
+                page_count: 2,
+                pages: vec![image(), image()]
+            })
+            .is_err()
+    );
+    assert_eq!(
+        documents.outputs.live_count(),
+        crate::outputs::MAX_LIVE_OUTPUTS - 1
+    );
 }

@@ -14,6 +14,10 @@ pub mod methods {
     pub const GENERATE_PPTX: &str = "GeneratePptx";
     /// `ExtractText` — extract text from a streamed PDF.
     pub const EXTRACT_TEXT: &str = "ExtractText";
+    /// `ExtractDocument` — bounded document text and provenance from a stream.
+    pub const EXTRACT_DOCUMENT: &str = "ExtractDocument";
+    /// `RenderPdf` — selected PDF pages as held PNG outputs.
+    pub const RENDER_PDF: &str = "RenderPdf";
     /// `ReadOutput` — read a bounded base64-encoded output chunk.
     pub const READ_OUTPUT: &str = "ReadOutput";
     /// `ReleaseOutput` — release a held output.
@@ -21,10 +25,12 @@ pub mod methods {
 }
 
 /// All method names in the declaration order used by the module interface.
-pub const METHODS: [&str; 5] = [
+pub const METHODS: [&str; 7] = [
     methods::GENERATE_DOCX,
     methods::GENERATE_PPTX,
     methods::EXTRACT_TEXT,
+    methods::EXTRACT_DOCUMENT,
+    methods::RENDER_PDF,
     methods::READ_OUTPUT,
     methods::RELEASE_OUTPUT,
 ];

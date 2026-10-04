@@ -130,6 +130,11 @@ jobs:
         run: |
           set -euo pipefail
           perl -0pi -e 's/(\[workspace\.package\][\s\S]*?\nversion = ")[^"]+(")/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
+          # The library and its TinyBus contract ship from the same source tag.
+          # Raise the package dependency floor with that tag so packaged
+          # consumers cannot resolve an older contract without the new API.
+          perl -0pi -e 's/(tinydocs-bus = \{ version = ")[^"]+("[,}])/$1$ENV{NEXT_VERSION}$2/' Cargo.toml
+          grep -Fq "tinydocs-bus = { version = \"$NEXT_VERSION\", path = \"crates/tinydocs-bus\" }" Cargo.toml
           cargo update -p tinydocs-bus --precise "$NEXT_VERSION"
           cargo update -p "$CRATE_NAME" --precise "$NEXT_VERSION"
 
