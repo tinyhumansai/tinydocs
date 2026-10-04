@@ -456,3 +456,13 @@ fn worksheet_phonetic_annotations_do_not_change_shared_or_inline_values() {
         "東京駅\n東京駅\n\n"
     );
 }
+
+#[test]
+fn word_carriage_return_elements_preserve_line_boundaries() {
+    for xml in [
+        b"<w:p><w:t>Hello</w:t><w:cr/><w:t>world</w:t></w:p>".as_slice(),
+        b"<w:p><w:t>Hello</w:t><w:cr></w:cr><w:t>world</w:t></w:p>".as_slice(),
+    ] {
+        assert_eq!(xml_text(xml, &[], 1024).unwrap().text, "Hello\nworld\n");
+    }
+}

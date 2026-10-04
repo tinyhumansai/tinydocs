@@ -197,7 +197,7 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
                 in_text = local.as_ref() == b"t" && phonetic_depth.is_none();
                 if phonetic_depth.is_none() {
                     match local.as_ref() {
-                        b"br" => output.append("\n"),
+                        b"br" | b"cr" => output.append("\n"),
                         b"tab" => output.append("\t"),
                         _ => {}
                     }
@@ -250,7 +250,7 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
                 }
             }
             Event::Empty(e) if phonetic_depth.is_none() => match e.local_name().as_ref() {
-                b"br" => output.append("\n"),
+                b"br" | b"cr" => output.append("\n"),
                 b"tab" => output.append("\t"),
                 _ => {}
             },
