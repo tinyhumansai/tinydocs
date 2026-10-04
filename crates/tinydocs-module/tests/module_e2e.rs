@@ -12,7 +12,7 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::time::Duration;
+use std::{io::Write, time::Duration};
 
 use base64::Engine as _;
 use tinybus::Connection;
@@ -233,6 +233,28 @@ async fn extracts_and_renders_document_intake(
     target: &Target,
     proxy: &tinybus::Proxy,
 ) {
+    let docx = docx_with_text("Office intake through TinyBus");
+    let spec = tinydocs_bus::ExtractDocumentSpec::new(tinydocs_bus::DocumentFormat::Docx);
+    let extracted_docx: tinydocs_bus::ExtractedDocument = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::EXTRACT_DOCUMENT).unwrap(),
+            |stream| serde_json::json!([spec, stream]),
+            &docx,
+        )
+        .await
+        .expect("DOCX intake should succeed through the module");
+    assert_eq!(extracted_docx.format, tinydocs_bus::DocumentFormat::Docx);
+    assert_eq!(extracted_docx.section_count, 1);
+    assert_eq!(extracted_docx.sections[0].source, "word/document.xml");
+    assert!(
+        extracted_docx.sections[0]
+            .text
+            .contains("Office intake through TinyBus")
+    );
+
     let pdf = pdf_with_text("Intake provenance");
     let spec = tinydocs_bus::ExtractDocumentSpec::new(tinydocs_bus::DocumentFormat::Pdf);
     let extracted: tinydocs_bus::ExtractedDocument = client
@@ -276,6 +298,22 @@ async fn extracts_and_renders_document_intake(
         )
         .await
         .unwrap();
+}
+
+fn docx_with_text(text: &str) -> Vec<u8> {
+    let mut archive = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    archive
+        .start_file(
+            "word/document.xml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    write!(
+        archive,
+        "<w:document xmlns:w='w'><w:body><w:p><w:r><w:t>{text}</w:t></w:r></w:p></w:body></w:document>"
+    )
+    .unwrap();
+    archive.finish().unwrap().into_inner()
 }
 
 /// The lengths in the spec are the authority.
