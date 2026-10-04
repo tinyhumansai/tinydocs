@@ -166,7 +166,8 @@ pub(super) fn normalize_xml(xml: &[u8]) -> Result<Cow<'_, [u8]>> {
     if content.len() % 2 != 0 {
         return Err(Error::extraction_failed("invalid UTF-16 XML length"));
     }
-    let units = content.chunks_exact(2).map(|pair| {
+    let (pairs, _) = content.as_chunks::<2>();
+    let units = pairs.iter().map(|pair| {
         if big_endian {
             u16::from_be_bytes([pair[0], pair[1]])
         } else {
