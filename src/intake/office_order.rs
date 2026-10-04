@@ -161,7 +161,13 @@ fn elements(
                         std::str::from_utf8(attribute.key.as_ref())
                             .map_err(failed)?
                             .to_owned(),
-                        attribute.unescape_value().map_err(failed)?.into_owned(),
+                        attribute
+                            .decoded_and_normalized_value(
+                                quick_xml::XmlVersion::Implicit1_0,
+                                reader.decoder(),
+                            )
+                            .map_err(failed)?
+                            .into_owned(),
                     ));
                 }
                 consume(&name, parents.last().map_or("", String::as_str), &attrs)?;

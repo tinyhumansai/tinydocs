@@ -411,3 +411,24 @@ fn budget_exhaustion_still_validates_xml_and_shared_string_indices() {
     assert!(output.truncated);
     assert_eq!(output.text.capacity(), 3);
 }
+
+#[test]
+fn shared_strings_enforce_count_and_allocation_budgets_before_push() {
+    let too_many = format!("<sst>{}</sst>", "<si/>".repeat(65_537));
+    assert!(xml_strings(too_many.as_bytes()).is_err());
+    let too_large = format!(
+        "<sst><si><t>{}</t></si></sst>",
+        "a".repeat(4 * 1024 * 1024 + 1)
+    );
+    assert!(xml_strings(too_large.as_bytes()).is_err());
+    let accepted = xml_strings(b"<sst><si/><si><t>ok</t></si></sst>").unwrap();
+    assert_eq!(accepted, vec!["", "ok"]);
+}
+
+#[test]
+fn short_section_does_not_retain_unused_output_budget() {
+    for xml in [b"<t/>".as_slice(), b"<t>ok</t>".as_slice()] {
+        let text = xml_text(xml, &[], 200_000).unwrap();
+        assert_eq!(text.text.capacity(), text.text.len());
+    }
+}

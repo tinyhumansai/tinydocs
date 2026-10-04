@@ -15,6 +15,8 @@ const MAX_INPUT: usize = 64 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 32 * 1024 * 1024;
 const MAX_PART: u64 = 8 * 1024 * 1024;
 const MAX_ENTRIES: usize = 2048;
+const MAX_SHARED_STRINGS: usize = 65_536;
+const MAX_SHARED_TEXT_BYTES: usize = 4 * 1024 * 1024;
 
 /// Extract bounded visible text with document/page/slide/worksheet provenance.
 ///
@@ -146,13 +148,25 @@ fn failed(error: impl std::fmt::Display) -> Error {
 fn xml_strings(xml: &[u8]) -> Result<Vec<String>> {
     let mut result = Vec::new();
     let mut current = String::new();
+    let mut text_bytes = 0usize;
     xml_events(xml, |event, text| {
         if let Some(value) = text {
+            text_bytes = text_bytes
+                .checked_add(value.len())
+                .ok_or_else(|| failed("shared string size overflow"))?;
+            if text_bytes > MAX_SHARED_TEXT_BYTES {
+                return Err(failed("shared string text budget exceeded"));
+            }
             current.push_str(value);
         }
         if event == "si" {
+            if result.len() >= MAX_SHARED_STRINGS {
+                return Err(failed("shared string count budget exceeded"));
+            }
+            current.shrink_to_fit();
             result.push(std::mem::take(&mut current));
         }
+        Ok(())
     })?;
     Ok(result)
 }
@@ -245,6 +259,7 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
             _ => {}
         }
     }
+    output.text.shrink_to_fit();
     Ok(output)
 }
 fn append_index(current: &mut String, value: &str) -> Result<()> {
@@ -259,7 +274,7 @@ fn decode_reference(name: &str) -> Result<String> {
         .map(std::borrow::Cow::into_owned)
         .map_err(failed)
 }
-fn xml_events(xml: &[u8], mut consume: impl FnMut(&str, Option<&str>)) -> Result<()> {
+fn xml_events(xml: &[u8], mut consume: impl FnMut(&str, Option<&str>) -> Result<()>) -> Result<()> {
     let mut reader = Reader::from_reader(xml);
     let mut depth = 0usize;
     let mut in_text = false;
@@ -279,14 +294,14 @@ fn xml_events(xml: &[u8], mut consume: impl FnMut(&str, Option<&str>)) -> Result
                 consume(
                     std::str::from_utf8(e.local_name().as_ref()).map_err(failed)?,
                     None,
-                );
+                )?;
                 in_text = false;
             }
-            Event::Text(e) if in_text => consume("", Some(&e.decode().map_err(failed)?)),
-            Event::CData(e) if in_text => consume("", Some(&e.decode().map_err(failed)?)),
-            Event::Empty(e) if e.local_name().as_ref() == b"si" => consume("si", None),
+            Event::Text(e) if in_text => consume("", Some(&e.decode().map_err(failed)?))?,
+            Event::CData(e) if in_text => consume("", Some(&e.decode().map_err(failed)?))?,
+            Event::Empty(e) if e.local_name().as_ref() == b"si" => consume("si", None)?,
             Event::GeneralRef(e) if in_text => {
-                consume("", Some(&decode_reference(&e.decode().map_err(failed)?)?));
+                consume("", Some(&decode_reference(&e.decode().map_err(failed)?)?))?;
             }
             Event::DocType(_) => {
                 return Err(Error::extraction_failed("XML DTDs are not supported"));

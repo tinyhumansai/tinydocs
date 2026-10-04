@@ -37,7 +37,9 @@ fn renders_only_requested_pages_in_order_with_png_dimensions() {
     let frame = reader.next_frame(&mut pixels).unwrap();
     assert!(
         pixels[..frame.buffer_size()]
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|pixel| pixel[0] < 128 && pixel[1] < 128 && pixel[2] < 128),
         "scanned image must produce non-white raster pixels"
     );
