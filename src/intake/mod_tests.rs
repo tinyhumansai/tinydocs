@@ -432,3 +432,27 @@ fn short_section_does_not_retain_unused_output_budget() {
         assert_eq!(text.text.capacity(), text.text.len());
     }
 }
+
+#[test]
+fn explicit_office_breaks_and_tabs_preserve_word_boundaries() {
+    let docx =
+        b"<w:p><w:r><w:t>Hello</w:t><w:br/><w:t>world</w:t><w:tab/><w:t>end</w:t></w:r></w:p>";
+    assert_eq!(
+        xml_text(docx, &[], 1024).unwrap().text,
+        "Hello\nworld\tend\n"
+    );
+    let pptx =
+        b"<a:p><a:r><a:t>Hello</a:t></a:r><a:br><a:rPr/></a:br><a:r><a:t>world</a:t></a:r></a:p>";
+    assert_eq!(xml_text(pptx, &[], 1024).unwrap().text, "Hello\nworld\n");
+}
+
+#[test]
+fn worksheet_phonetic_annotations_do_not_change_shared_or_inline_values() {
+    let shared = xml_strings("<sst><si><t>東京</t><rPh sb=\"0\" eb=\"2\"><t>とうきょう</t></rPh><r><t>駅</t></r></si></sst>".as_bytes()).unwrap();
+    assert_eq!(shared, vec!["東京駅"]);
+    let xml = "<row><c t=\"s\"><v>0</v></c><c t=\"inlineStr\"><is><t>東京</t><rPh><t>とうきょう</t></rPh><r><t>駅</t></r></is></c></row>";
+    assert_eq!(
+        xml_text(xml.as_bytes(), &shared, 1024).unwrap().text,
+        "東京駅\n東京駅\n\n"
+    );
+}

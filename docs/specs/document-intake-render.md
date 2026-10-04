@@ -15,7 +15,9 @@ The result reports total section count, ordered source labels, bounded text,
 truncation, and PDF scanned-page candidates. Blank PDF text is a candidate for
 host-side analysis, not a determination that OCR will succeed. Office ordering
 follows presentation/workbook relationships. XLSX supports shared strings,
-inline strings, and cached values; it does not calculate formulas.
+inline strings, and cached values; phonetic annotations are excluded from cell
+values. Explicit Office breaks and tabs preserve word boundaries. It does not
+calculate formulas.
 
 `pdf_render::render(bytes, &RenderPdfSpec)` renders explicitly selected 1-based
 PDF pages to PNG with width and height metadata. It does not perform OCR or

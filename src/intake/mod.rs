@@ -182,6 +182,7 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
     let mut reader = Reader::from_reader(xml);
     let mut depth = 0usize;
     let mut in_text = false;
+    let mut phonetic_depth = None;
     loop {
         match reader.read_event().map_err(failed)? {
             Event::Start(e) => {
@@ -190,7 +191,17 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
                     return Err(Error::extraction_failed("XML nesting limit exceeded"));
                 }
                 let local = e.local_name();
-                in_text = local.as_ref() == b"t";
+                if local.as_ref() == b"rPh" && phonetic_depth.is_none() {
+                    phonetic_depth = Some(depth);
+                }
+                in_text = local.as_ref() == b"t" && phonetic_depth.is_none();
+                if phonetic_depth.is_none() {
+                    match local.as_ref() {
+                        b"br" => output.append("\n"),
+                        b"tab" => output.append("\t"),
+                        _ => {}
+                    }
+                }
                 value = local.as_ref() == b"v";
                 if local.as_ref() == b"c" {
                     shared_cell = false;
@@ -204,30 +215,21 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
             }
             Event::Text(e) if in_text || value => {
                 let decoded = e.decode().map_err(failed)?;
-                if value && shared_cell {
-                    append_index(&mut current, &decoded)?;
-                } else {
-                    output.append(&decoded);
-                }
+                output.append_value(&mut current, value && shared_cell, &decoded)?;
             }
             Event::GeneralRef(e) if in_text || value => {
                 let name = e.decode().map_err(failed)?;
                 let decoded = decode_reference(&name)?;
-                if value && shared_cell {
-                    append_index(&mut current, &decoded)?;
-                } else {
-                    output.append(&decoded);
-                }
+                output.append_value(&mut current, value && shared_cell, &decoded)?;
             }
             Event::CData(e) if in_text || value => {
                 let decoded = e.decode().map_err(failed)?;
-                if value && shared_cell {
-                    append_index(&mut current, &decoded)?;
-                } else {
-                    output.append(&decoded);
-                }
+                output.append_value(&mut current, value && shared_cell, &decoded)?;
             }
             Event::End(e) => {
+                if phonetic_depth == Some(depth) {
+                    phonetic_depth = None;
+                }
                 depth = depth
                     .checked_sub(1)
                     .ok_or_else(|| Error::extraction_failed("invalid XML nesting"))?;
@@ -247,6 +249,11 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
                     output.append("\n");
                 }
             }
+            Event::Empty(e) if phonetic_depth.is_none() => match e.local_name().as_ref() {
+                b"br" => output.append("\n"),
+                b"tab" => output.append("\t"),
+                _ => {}
+            },
             Event::DocType(_) => {
                 return Err(Error::extraction_failed("XML DTDs are not supported"));
             }
@@ -278,6 +285,7 @@ fn xml_events(xml: &[u8], mut consume: impl FnMut(&str, Option<&str>) -> Result<
     let mut reader = Reader::from_reader(xml);
     let mut depth = 0usize;
     let mut in_text = false;
+    let mut phonetic_depth = None;
     loop {
         match reader.read_event().map_err(failed)? {
             Event::Start(e) => {
@@ -285,9 +293,16 @@ fn xml_events(xml: &[u8], mut consume: impl FnMut(&str, Option<&str>) -> Result<
                 if depth > 128 {
                     return Err(Error::extraction_failed("XML nesting limit exceeded"));
                 }
-                in_text = e.local_name().as_ref() == b"t";
+                let local = e.local_name();
+                if local.as_ref() == b"rPh" && phonetic_depth.is_none() {
+                    phonetic_depth = Some(depth);
+                }
+                in_text = local.as_ref() == b"t" && phonetic_depth.is_none();
             }
             Event::End(e) => {
+                if phonetic_depth == Some(depth) {
+                    phonetic_depth = None;
+                }
                 depth = depth
                     .checked_sub(1)
                     .ok_or_else(|| Error::extraction_failed("invalid XML nesting"))?;
@@ -367,6 +382,14 @@ struct TextSink {
     truncated: bool,
 }
 impl TextSink {
+    fn append_value(&mut self, index: &mut String, shared: bool, text: &str) -> Result<()> {
+        if shared {
+            append_index(index, text)
+        } else {
+            self.append(text);
+            Ok(())
+        }
+    }
     fn append(&mut self, text: &str) {
         if self.truncated {
             return;
