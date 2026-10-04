@@ -1,7 +1,8 @@
 //! Resolve displayed slide and worksheet order through OOXML manifests.
 
 use super::{
-    DocumentFormat, MAX_ENTRIES, Result, failed, read_part, zip_admission::AdmittedReader,
+    DocumentFormat, MAX_ENTRIES, Result, failed, normalize_xml, read_part,
+    zip_admission::AdmittedReader,
 };
 use crate::Error;
 use quick_xml::{Reader, events::Event};
@@ -135,7 +136,8 @@ fn elements(
     xml: &[u8],
     mut consume: impl FnMut(&str, &str, &[(String, String)]) -> Result<()>,
 ) -> Result<()> {
-    let mut reader = Reader::from_reader(xml);
+    let xml = normalize_xml(xml)?;
+    let mut reader = Reader::from_reader(xml.as_ref());
     let mut parents = Vec::<String>::new();
     loop {
         let event = reader.read_event().map_err(failed)?;

@@ -434,6 +434,28 @@ fn short_section_does_not_retain_unused_output_budget() {
 }
 
 #[test]
+fn decodes_utf16_ooxml_parts_before_parsing() {
+    for (bom, encode) in [
+        (&[0xFF, 0xFE][..], u16::to_le_bytes as fn(u16) -> [u8; 2]),
+        (&[0xFE, 0xFF][..], u16::to_be_bytes as fn(u16) -> [u8; 2]),
+    ] {
+        let source = "<?xml version='1.0' encoding='UTF-16'?><sst><si><t>Résumé</t></si></sst>";
+        let mut xml = bom.to_vec();
+        for unit in source.encode_utf16() {
+            xml.extend_from_slice(&encode(unit));
+        }
+        let shared = xml_strings(&xml).unwrap();
+        assert_eq!(shared, vec!["Résumé"]);
+        assert_eq!(
+            xml_text(b"<c t='s'><v>0</v></c>", &shared, 1024)
+                .unwrap()
+                .text,
+            "Résumé\n"
+        );
+    }
+}
+
+#[test]
 fn explicit_office_breaks_and_tabs_preserve_word_boundaries() {
     let docx =
         b"<w:p><w:r><w:t>Hello</w:t><w:br/><w:t>world</w:t><w:tab/><w:t>end</w:t></w:r></w:p>";

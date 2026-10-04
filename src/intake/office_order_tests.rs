@@ -67,3 +67,22 @@ fn manifest_reader_caps_depth_names_attributes_and_rejects_invalid_structure() {
         ]
     );
 }
+
+#[test]
+fn manifest_reader_accepts_utf16_xml() {
+    let mut xml = vec![0xFF, 0xFE];
+    for unit in
+        "<?xml version='1.0' encoding='UTF-16'?><root><item key='ok'/></root>".encode_utf16()
+    {
+        xml.extend_from_slice(&unit.to_le_bytes());
+    }
+    let mut values = Vec::new();
+    elements(&xml, |name, parent, attrs| {
+        if name == "item" {
+            values.push((parent.to_owned(), attrs[0].1.clone()));
+        }
+        Ok(())
+    })
+    .unwrap();
+    assert_eq!(values, vec![("root".into(), "ok".into())]);
+}

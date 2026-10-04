@@ -4,6 +4,7 @@
 //! CPU-bound; hosts own execution deadlines and any stronger isolation.
 use crate::{Error, Result};
 use quick_xml::{Reader, events::Event};
+use std::borrow::Cow;
 use std::io::Read;
 mod office_order;
 mod zip_admission;
@@ -145,11 +146,51 @@ fn office_parts(
 fn failed(error: impl std::fmt::Display) -> Error {
     Error::extraction_failed(&error.to_string())
 }
+pub(super) fn normalize_xml(xml: &[u8]) -> Result<Cow<'_, [u8]>> {
+    let (encoding, content) = if xml.starts_with(&[0xFF, 0xFE]) {
+        (Some(false), &xml[2..])
+    } else if xml.starts_with(&[0xFE, 0xFF]) {
+        (Some(true), &xml[2..])
+    } else if xml.starts_with(&[b'<', 0, b'?', 0]) {
+        (Some(false), xml)
+    } else if xml.starts_with(&[0, b'<', 0, b'?']) {
+        (Some(true), xml)
+    } else {
+        (None, xml)
+    };
+    let Some(big_endian) = encoding else {
+        return Ok(Cow::Borrowed(
+            xml.strip_prefix(&[0xEF, 0xBB, 0xBF]).unwrap_or(xml),
+        ));
+    };
+    if content.len() % 2 != 0 {
+        return Err(Error::extraction_failed("invalid UTF-16 XML length"));
+    }
+    let units = content.chunks_exact(2).map(|pair| {
+        if big_endian {
+            u16::from_be_bytes([pair[0], pair[1]])
+        } else {
+            u16::from_le_bytes([pair[0], pair[1]])
+        }
+    });
+    let mut utf8 = String::new();
+    for character in char::decode_utf16(units) {
+        utf8.push(character.map_err(failed)?);
+    }
+    if utf8.starts_with("<?xml") {
+        let declaration_end = utf8
+            .find("?>")
+            .ok_or_else(|| Error::extraction_failed("invalid XML declaration"))?;
+        utf8.drain(..declaration_end + 2);
+    }
+    Ok(Cow::Owned(utf8.into_bytes()))
+}
 fn xml_strings(xml: &[u8]) -> Result<Vec<String>> {
+    let xml = normalize_xml(xml)?;
     let mut result = Vec::new();
     let mut current = String::new();
     let mut text_bytes = 0usize;
-    xml_events(xml, |event, text| {
+    xml_events(xml.as_ref(), |event, text| {
         if let Some(value) = text {
             text_bytes = text_bytes
                 .checked_add(value.len())
@@ -171,6 +212,7 @@ fn xml_strings(xml: &[u8]) -> Result<Vec<String>> {
     Ok(result)
 }
 fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
+    let xml = normalize_xml(xml)?;
     let mut output = TextSink {
         text: String::with_capacity(limit),
         limit,
@@ -179,7 +221,7 @@ fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
     let mut shared_cell = false;
     let mut value = false;
     let mut current = String::new();
-    let mut reader = Reader::from_reader(xml);
+    let mut reader = Reader::from_reader(xml.as_ref());
     let mut depth = 0usize;
     let mut in_text = false;
     let mut phonetic_depth = None;
@@ -282,7 +324,8 @@ fn decode_reference(name: &str) -> Result<String> {
         .map_err(failed)
 }
 fn xml_events(xml: &[u8], mut consume: impl FnMut(&str, Option<&str>) -> Result<()>) -> Result<()> {
-    let mut reader = Reader::from_reader(xml);
+    let xml = normalize_xml(xml)?;
+    let mut reader = Reader::from_reader(xml.as_ref());
     let mut depth = 0usize;
     let mut in_text = false;
     let mut phonetic_depth = None;
