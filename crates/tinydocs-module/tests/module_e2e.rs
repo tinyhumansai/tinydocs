@@ -51,7 +51,7 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     extracts_and_renders_document_intake(&client, &target, &proxy).await;
     refuses_a_stream_that_contradicts_the_spec(&client, &target).await;
 
-    assert!(matches!(modules.list()[0].state, ModuleState::Ready));
+    wait_until_idle(&modules).await;
     broker_task.abort();
 }
 
@@ -127,6 +127,24 @@ async fn wait_until_serving(client: &Connection) {
     })
     .await
     .expect("module should become ready");
+}
+
+/// A call reply can reach its caller just before the host retires its in-flight
+/// count. Accept that valid `Serving` snapshot briefly, but fail immediately if
+/// the module faulted or stopped and require it to settle back to `Ready`.
+async fn wait_until_idle(modules: &ModuleHost) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let state = modules.list()[0].state.clone();
+            match state {
+                ModuleState::Ready => return,
+                ModuleState::Serving => tokio::task::yield_now().await,
+                other => panic!("module left service after E2E calls: {other:?}"),
+            }
+        }
+    })
+    .await
+    .expect("module should finish serving the final call");
 }
 
 /// No inbound payload, a held document out.
