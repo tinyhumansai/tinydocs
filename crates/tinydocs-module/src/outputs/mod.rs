@@ -32,7 +32,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 /// Largest chunk a caller may read in one `ReadOutput`.
@@ -56,17 +55,7 @@ pub const MAX_LIVE_OUTPUTS: usize = 32;
 /// How long an output may go unread before it is dropped.
 pub const IDLE_TTL: Duration = Duration::from_secs(300);
 
-/// A handle to a produced document, and what a caller needs to read it back.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct OutputRef {
-    /// Opaque identifier, valid until read and released or expired.
-    pub output_id: String,
-    /// Total size in bytes, so a caller knows when it is done.
-    pub total_bytes: u64,
-    /// Lowercase hex SHA-256, so a caller can verify what it assembled.
-    pub sha256: String,
-}
+pub use tinydocs_bus::OutputRef;
 
 /// Why an output operation was refused.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]

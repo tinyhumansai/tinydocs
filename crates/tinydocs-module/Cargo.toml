@@ -17,7 +17,7 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 # The pure document library remains independently publishable and bus-agnostic.
-tinydocs = { path = "../..", default-features = false, features = ["docx", "pptx", "pdf"] }
+tinydocs = { path = "../..", default-features = false, features = ["docx", "pptx", "pdf", "intake", "pdf-render"] }
 # The transport-free vocabulary shared with every TinyBus host.
 tinydocs-bus = { path = "../tinydocs-bus" }
 # TinyBus provides the typed service interface and dynamic module host ABI.

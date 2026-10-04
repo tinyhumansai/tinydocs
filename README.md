@@ -136,6 +136,8 @@ exposes:
 GenerateDocx(DocumentSpec)                         -> OutputRef
 GeneratePptx(deck, Option<StreamRef>)              -> OutputRef
 ExtractText(StreamRef)                             -> OutputRef
+ExtractDocument(ExtractDocumentSpec, StreamRef)     -> ExtractedDocument
+RenderPdf(RenderPdfSpec, StreamRef)                 -> RenderedPdf
 ReadOutput(output_id, offset, len)                 -> base64
 ReleaseOutput(output_id)                           -> ()
 ```
@@ -241,3 +243,19 @@ cargo clippy --all-targets --no-default-features -- -D warnings
 ## License
 
 GPL-3.0-only. See [LICENSE](LICENSE).
+
+## Document intake and vision inputs
+
+Optional `intake` extracts bounded PDF page text and DOCX/PPTX/XLSX visible
+text with source provenance. Optional `pdf-render` rasterizes explicitly
+selected PDF pages to PNG for host-owned vision. The shipped module enables
+both features. See [intake bounds](src/intake/README.md) and
+[rendering bounds](src/pdf_render/README.md) for limits and parser resource
+limitations. Existing generation and `ExtractText` payloads are unchanged.
+
+The new methods extend contract version 2 additively. A version-2 module from
+an older release can still serve the original five methods but will not have
+`ExtractDocument` or `RenderPdf`; hosts must detect unavailable members and
+require a published module release for intake. Do not derive release checksums
+from a local build. `OutputRef` is now defined in `tinydocs-bus` and remains
+re-exported by `tinydocs-module` with the same wire fields.

@@ -48,6 +48,7 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     generates_a_docx(&proxy).await;
     generates_a_pptx_from_a_streamed_image_pair(&client, &target, &proxy).await;
     extracts_text_from_a_streamed_pdf(&client, &target, &proxy).await;
+    extracts_and_renders_document_intake(&client, &target, &proxy).await;
     refuses_a_stream_that_contradicts_the_spec(&client, &target).await;
 
     assert!(matches!(modules.list()[0].state, ModuleState::Ready));
@@ -224,6 +225,57 @@ async fn extracts_text_from_a_streamed_pdf(
         text.contains("Hello from the module"),
         "extracted text missing content: {text:?}"
     );
+}
+
+/// New intake methods preserve streamed input and held output lifecycles.
+async fn extracts_and_renders_document_intake(
+    client: &Connection,
+    target: &Target,
+    proxy: &tinybus::Proxy,
+) {
+    let pdf = pdf_with_text("Intake provenance");
+    let spec = tinydocs_bus::ExtractDocumentSpec::new(tinydocs_bus::DocumentFormat::Pdf);
+    let extracted: tinydocs_bus::ExtractedDocument = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::EXTRACT_DOCUMENT).unwrap(),
+            |stream| serde_json::json!([spec, stream]),
+            &pdf,
+        )
+        .await
+        .unwrap();
+    assert_eq!(extracted.section_count, 1);
+    assert_eq!(extracted.sections[0].source, "page:1");
+    assert!(extracted.sections[0].text.contains("Intake provenance"));
+    let spec = tinydocs_bus::RenderPdfSpec {
+        pages: vec![1],
+        max_dimension: 128,
+        max_total_pixels: 100_000,
+        max_output_bytes: 1_000_000,
+    };
+    let rendered: tinydocs_bus::RenderedPdf = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::RENDER_PDF).unwrap(),
+            |stream| serde_json::json!([spec, stream]),
+            &pdf,
+        )
+        .await
+        .unwrap();
+    assert_eq!(rendered.page_count, 1);
+    let png = download(proxy, &rendered.pages[0].output).await;
+    assert!(png.starts_with(b"\x89PNG\r\n\x1a\n"));
+    proxy
+        .call::<()>(
+            methods::RELEASE_OUTPUT,
+            (rendered.pages[0].output.output_id.clone(),),
+        )
+        .await
+        .unwrap();
 }
 
 /// The lengths in the spec are the authority.

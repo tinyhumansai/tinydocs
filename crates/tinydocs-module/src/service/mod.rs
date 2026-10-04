@@ -1,11 +1,13 @@
 //! `TinyBus` service boundary for the document surface.
 //!
-//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting five methods:
+//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting seven methods:
 //!
 //! ```text
 //! GenerateDocx(DocumentSpec)                        -> OutputRef
 //! GeneratePptx(WirePresentationSpec, Option<Stream>) -> OutputRef
 //! ExtractText(StreamRef)                            -> OutputRef
+//! ExtractDocument(spec, StreamRef)                   -> ExtractedDocument
+//! RenderPdf(spec, StreamRef)                         -> RenderedPdf
 //! ReadOutput(output_id, offset, len)                -> base64
 //! ReleaseOutput(output_id)                          -> ()
 //! ```
@@ -55,7 +57,10 @@ use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinydocs::spec::presentation::MAX_IMAGE_BYTES;
 use tinydocs::spec::{DocumentSpec, PresentationSpec, SlideImage, SlideSpec};
 use tinydocs::{Error, pdf, pptx};
-use tinydocs_bus::{BUS_NAME, OBJECT_PATH};
+use tinydocs_bus::{
+    BUS_NAME, ExtractDocumentSpec, ExtractedDocument, OBJECT_PATH, RenderPdfSpec, RenderedPdf,
+    RenderedPdfPage,
+};
 
 use crate::outputs::{OutputError, OutputRef, OutputStore};
 
@@ -118,6 +123,23 @@ impl Documents {
         self.hold(text.into_bytes())
     }
 
+    /// Extract bounded document text and section provenance from a stream.
+    async fn extract_document(
+        &self,
+        spec: ExtractDocumentSpec,
+        document: StreamRef,
+    ) -> BusResult<ExtractedDocument> {
+        let bytes = self.read_stream(&document).await?;
+        blocking(move || tinydocs::intake::extract(&bytes, &spec)).await
+    }
+
+    /// Render explicitly selected PDF pages and hold each PNG output.
+    async fn render_pdf(&self, spec: RenderPdfSpec, document: StreamRef) -> BusResult<RenderedPdf> {
+        let bytes = self.read_stream(&document).await?;
+        let images = blocking(move || tinydocs::pdf_render::render(&bytes, &spec)).await?;
+        self.hold_images(images)
+    }
+
     /// Read up to `len` bytes of a held document at `offset`, base64-encoded.
     async fn read_output(&self, output_id: String, offset: u64, len: u64) -> BusResult<String> {
         let bytes = self
@@ -136,6 +158,31 @@ impl Documents {
 }
 
 impl Documents {
+    /// Roll back every allocated output when a batch cannot be retained.
+    fn hold_images(&self, images: tinydocs::pdf_render::PdfImages) -> BusResult<RenderedPdf> {
+        let mut result = RenderedPdf {
+            page_count: images.page_count,
+            pages: Vec::new(),
+        };
+        for image in images.pages {
+            match self.hold(image.bytes) {
+                Ok(output) => result.pages.push(RenderedPdfPage {
+                    page: image.page,
+                    width: image.width,
+                    height: image.height,
+                    output,
+                }),
+                Err(error) => {
+                    for page in result.pages {
+                        let _ = self.outputs.release(&page.output.output_id, Instant::now());
+                    }
+                    return Err(error);
+                }
+            }
+        }
+        Ok(result)
+    }
+
     /// Hold a produced document and return its handle.
     fn hold(&self, bytes: Vec<u8>) -> BusResult<OutputRef> {
         self.outputs
@@ -340,6 +387,8 @@ pub(crate) mod exports {
             "GenerateDocx",
             "GeneratePptx",
             "ExtractText",
+            "ExtractDocument",
+            "RenderPdf",
             "ReadOutput",
             "ReleaseOutput",
         ],
