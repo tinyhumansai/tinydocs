@@ -9,6 +9,58 @@ fn archive(parts: &[(&str, &str)]) -> Vec<u8> {
             .unwrap();
         zip.write_all(xml.as_bytes()).unwrap();
     }
+    for (prefix, manifest, rels, root, container, element, kind) in [
+        (
+            "ppt/slides/slide",
+            "ppt/presentation.xml",
+            "ppt/_rels/presentation.xml.rels",
+            "presentation",
+            "sldIdLst",
+            "sldId",
+            "slide",
+        ),
+        (
+            "xl/worksheets/sheet",
+            "xl/workbook.xml",
+            "xl/_rels/workbook.xml.rels",
+            "workbook",
+            "sheets",
+            "sheet",
+            "worksheet",
+        ),
+    ] {
+        let mut numbered: Vec<_> = parts
+            .iter()
+            .filter_map(|(name, _)| {
+                name.strip_prefix(prefix)
+                    .and_then(|value| value.strip_suffix(".xml"))
+                    .and_then(|value| value.parse::<u32>().ok())
+                    .map(|n| (n, *name))
+            })
+            .collect();
+        numbered.sort_unstable();
+        if numbered.is_empty() || parts.iter().any(|(name, _)| *name == manifest) {
+            continue;
+        }
+        let mut items = String::new();
+        for (n, _) in &numbered {
+            use std::fmt::Write as _;
+            write!(&mut items, "<{element} r:id='r{n}'/>").unwrap();
+        }
+        let xml = format!("<{root} xmlns:r='r'><{container}>{items}</{container}></{root}>");
+        zip.start_file(manifest, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(xml.as_bytes()).unwrap();
+        let mut relationships = String::new();
+        for (n, name) in &numbered {
+            use std::fmt::Write as _;
+            write!(&mut relationships, "<Relationship Id='r{n}' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/{kind}' Target='{}'/>", name.split_once('/').unwrap().1).unwrap();
+        }
+        zip.start_file(rels, zip::write::SimpleFileOptions::default())
+            .unwrap();
+        zip.write_all(format!("<Relationships>{relationships}</Relationships>").as_bytes())
+            .unwrap();
+    }
     zip.finish().unwrap().into_inner()
 }
 #[test]
@@ -32,7 +84,7 @@ fn truncates_text_without_splitting_unicode() {
 }
 
 #[test]
-fn extracts_slides_in_numeric_order_and_excludes_metadata() {
+fn extracts_slides_in_manifest_order_and_excludes_metadata() {
     let bytes = archive(&[
         ("ppt/slides/slide10.xml", "<a:t xmlns:a='a'>ten</a:t>"),
         ("ppt/slides/slide2.xml", "<a:t xmlns:a='a'>two</a:t>"),
@@ -210,4 +262,152 @@ fn rejects_malformed_shared_string_xml() {
         )
         .is_err()
     );
+}
+
+#[test]
+fn zip_member_limits_are_rejected_by_admission_before_eager_indexing() {
+    let names: Vec<_> = (0..=MAX_ENTRIES).map(|i| format!("part{i}")).collect();
+    let parts: Vec<_> = names.iter().map(|name| (name.as_str(), "")).collect();
+    let error = extract(
+        &archive(&parts),
+        &ExtractDocumentSpec::new(DocumentFormat::Docx),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("ZIP admission count limit"));
+    let error = extract(
+        &archive(&[(&"x".repeat(257), "")]),
+        &ExtractDocumentSpec::new(DocumentFormat::Docx),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("ZIP admission name limit"));
+}
+
+#[test]
+fn worksheet_expansion_is_bounded_while_resolving_repeated_shared_strings() {
+    let shared = vec!["é".repeat(50_000)];
+    let xml = format!(
+        "<worksheet>{}</worksheet>",
+        "<c t='s'><v>0</v></c>".repeat(100)
+    );
+    let text = xml_text(xml.as_bytes(), &shared, 31).unwrap();
+    assert!(
+        text.text.len() <= 31,
+        "shared strings must be bounded before appending"
+    );
+    assert!(text.truncated);
+    assert!(text.text.capacity() <= 31);
+    let strings = format!("<sst><si><t>{}</t></si></sst>", shared[0]);
+    let bytes = archive(&[
+        ("xl/sharedStrings.xml", &strings),
+        ("xl/worksheets/sheet1.xml", &xml),
+    ]);
+    let mut spec = ExtractDocumentSpec::new(DocumentFormat::Xlsx);
+    spec.max_text_bytes = 31;
+    let result = extract(&bytes, &spec).unwrap();
+    assert!(result.truncated);
+    assert_eq!(result.section_count, 1);
+    assert_eq!(result.sections[0].text, "é".repeat(15));
+}
+
+#[test]
+fn office_manifest_order_excludes_orphans_and_preserves_part_provenance() {
+    let bytes = archive(&[
+        (
+            "ppt/presentation.xml",
+            "<p:presentation xmlns:p='p' xmlns:r='r'><p:sldIdLst><p:sldId r:id='r2'/><p:sldId r:id='r1'/></p:sldIdLst></p:presentation>",
+        ),
+        (
+            "ppt/_rels/presentation.xml.rels",
+            "<Relationships><Relationship Id='r1' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide' Target='slides/slide1.xml'/><Relationship Id='r2' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide' Target='slides/slide2.xml'/></Relationships>",
+        ),
+        ("ppt/slides/slide1.xml", "<t>first filename</t>"),
+        ("ppt/slides/slide2.xml", "<t>first displayed</t>"),
+        ("ppt/slides/slide3.xml", "<t>orphan</t>"),
+    ]);
+    let result = extract(&bytes, &ExtractDocumentSpec::new(DocumentFormat::Pptx)).unwrap();
+    assert_eq!(result.section_count, 2);
+    assert_eq!(result.sections[0].source, "ppt/slides/slide2.xml");
+    assert_eq!(result.sections[0].text, "first displayed");
+    assert_eq!(result.sections[1].source, "ppt/slides/slide1.xml");
+}
+
+#[test]
+fn workbook_order_uses_relationships_instead_of_names_and_ignores_orphans() {
+    let bytes = archive(&[
+        (
+            "xl/workbook.xml",
+            "<workbook xmlns:r='r'><sheets><sheet name='Visible B' r:id='b'/><sheet name='Visible A' r:id='a'/></sheets></workbook>",
+        ),
+        (
+            "xl/_rels/workbook.xml.rels",
+            "<Relationships><Relationship Id='a' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet' Target='worksheets/alpha.xml'></Relationship><Relationship Id='b' Type='http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet' Target='/xl/worksheets/beta.xml'/></Relationships>",
+        ),
+        ("xl/worksheets/alpha.xml", "<worksheet><t>A</t></worksheet>"),
+        ("xl/worksheets/beta.xml", "<worksheet><t>B</t></worksheet>"),
+        (
+            "xl/worksheets/sheet3.xml",
+            "<worksheet><t>orphan</t></worksheet>",
+        ),
+    ]);
+    let mut spec = ExtractDocumentSpec::new(DocumentFormat::Xlsx);
+    spec.max_sections = 1;
+    let result = extract(&bytes, &spec).unwrap();
+    assert_eq!(result.section_count, 2);
+    assert!(result.truncated);
+    assert_eq!(result.sections[0].source, "xl/worksheets/beta.xml");
+    assert_eq!(result.sections[0].index, 1);
+    assert_eq!(result.sections[0].text, "B");
+}
+
+#[test]
+fn invalid_document_relationships_and_manifests_fail_explicitly() {
+    let manifest = "<workbook xmlns:r='r'><sheets><sheet r:id='a'/></sheets></workbook>";
+    for relationships in [
+        "<Relationships/>",
+        "<Relationships><Relationship Id='a' Type='x/worksheet' Target='https://example.com/sheet.xml' TargetMode='External'/></Relationships>",
+        "<Relationships><Relationship Id='a' Type='x/worksheet' Target='../../outside.xml'/></Relationships>",
+        "<Relationships><Relationship Id='a' Type='x/worksheet' Target='worksheets/missing.xml'/></Relationships>",
+        "<Relationships><Relationship Id='a' Type='x/worksheet' Target='worksheets/sheet1.xml'/><Relationship Id='a' Type='x/worksheet' Target='worksheets/sheet1.xml'/></Relationships>",
+        "<Relationships><Relationship Id='a' Type='x/not-worksheet' Target='worksheets/sheet1.xml'/></Relationships>",
+        "<!DOCTYPE Relationships><Relationships/>",
+    ] {
+        let bytes = archive(&[
+            ("xl/workbook.xml", manifest),
+            ("xl/_rels/workbook.xml.rels", relationships),
+            ("xl/worksheets/sheet1.xml", "<worksheet/>"),
+        ]);
+        assert!(extract(&bytes, &ExtractDocumentSpec::new(DocumentFormat::Xlsx)).is_err());
+    }
+    for manifest in [
+        "<workbook><sheets><sheet/></sheets></workbook>",
+        "<workbook xmlns:r='r'><sheets><sheet r:id='a'/><sheet r:id='a'/></sheets></workbook>",
+        "<workbook><sheets>",
+    ] {
+        let bytes = archive(&[
+            ("xl/workbook.xml", manifest),
+            (
+                "xl/_rels/workbook.xml.rels",
+                "<Relationships><Relationship Id='a' Type='x/worksheet' Target='worksheets/sheet1.xml'/></Relationships>",
+            ),
+            ("xl/worksheets/sheet1.xml", "<worksheet/>"),
+        ]);
+        assert!(extract(&bytes, &ExtractDocumentSpec::new(DocumentFormat::Xlsx)).is_err());
+    }
+}
+
+#[test]
+fn budget_exhaustion_still_validates_xml_and_shared_string_indices() {
+    let shared = vec!["large output".repeat(1000)];
+    for xml in [
+        "<worksheet><c t='s'><v>0</v></c><t>&undefined;</t></worksheet>",
+        "<worksheet><c t='s'><v>0</v></c><c t='s'><v>999999999999999999999</v></c></worksheet>",
+        "<worksheet><c t='s'><v>0</v></c><c t='s'><v>42</v></c></worksheet>",
+        "<worksheet><c t='s'><v>0</v></c>",
+    ] {
+        assert!(xml_text(xml.as_bytes(), &shared, 1).is_err(), "{xml}");
+    }
+    let output = xml_text(b"<t>abcdef&amp;<![CDATA[more]]></t>", &[], 3).unwrap();
+    assert_eq!(output.text, "abc");
+    assert!(output.truncated);
+    assert_eq!(output.text.capacity(), 3);
 }

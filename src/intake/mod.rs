@@ -4,7 +4,9 @@
 //! CPU-bound; hosts own execution deadlines and any stronger isolation.
 use crate::{Error, Result};
 use quick_xml::{Reader, events::Event};
-use std::io::{Cursor, Read};
+use std::io::Read;
+mod office_order;
+mod zip_admission;
 pub use tinydocs_bus::intake::{
     DocumentFormat, DocumentSectionText, ExtractDocumentSpec, ExtractedDocument,
 };
@@ -42,9 +44,10 @@ pub fn extract(bytes: &[u8], spec: &ExtractDocumentSpec) -> Result<ExtractedDocu
     extract_office(bytes, spec)
 }
 fn extract_office(bytes: &[u8], spec: &ExtractDocumentSpec) -> Result<ExtractedDocument> {
-    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).map_err(failed)?;
-    let parts = office_parts(&mut archive, spec.format)?;
+    zip_admission::zip_preflight(bytes)?;
+    let mut archive = zip_admission::open_admitted_zip(bytes)?;
     let mut expanded_read = 0u64;
+    let parts = office_parts(&mut archive, spec.format, &mut expanded_read)?;
     let shared = if spec.format == DocumentFormat::Xlsx {
         match archive.by_name("xl/sharedStrings.xml") {
             Ok(part) => xml_strings(&read_part(part, &mut expanded_read)?)?,
@@ -70,14 +73,13 @@ fn extract_office(bytes: &[u8], spec: &ExtractDocumentSpec) -> Result<ExtractedD
             archive.by_index(part_index).map_err(failed)?,
             &mut expanded_read,
         )?;
-        let text = xml_text(&xml, &shared)?;
-        let bounded = bound_text(&text, remaining);
-        remaining -= bounded.len();
-        result.truncated |= bounded.len() < text.len();
+        let text = xml_text(&xml, &shared, remaining)?;
+        remaining -= text.text.len();
+        result.truncated |= text.truncated;
         result.sections.push(DocumentSectionText {
             source: name,
             index: u32::try_from(index + 1).map_err(failed)?,
-            text: bounded,
+            text: text.text,
             scanned_candidate: false,
         });
     }
@@ -95,8 +97,9 @@ fn read_part(part: impl Read, expanded: &mut u64) -> Result<Vec<u8>> {
     Ok(xml)
 }
 fn office_parts(
-    archive: &mut zip::ZipArchive<Cursor<&[u8]>>,
+    archive: &mut zip::ZipArchive<zip_admission::AdmittedReader<'_>>,
     format: DocumentFormat,
+    expanded_read: &mut u64,
 ) -> Result<Vec<(String, usize)>> {
     if archive.len() > MAX_ENTRIES {
         return Err(Error::extraction_failed("too many ZIP members"));
@@ -119,8 +122,7 @@ fn office_parts(
         }
         let selected = match format {
             DocumentFormat::Docx => name == "word/document.xml",
-            DocumentFormat::Pptx => numbered_part(name, "ppt/slides/slide").is_some(),
-            DocumentFormat::Xlsx => numbered_part(name, "xl/worksheets/sheet").is_some(),
+            DocumentFormat::Pptx | DocumentFormat::Xlsx => true,
             DocumentFormat::Pdf => false,
         };
         if selected {
@@ -130,17 +132,9 @@ fn office_parts(
             parts.push((name.to_owned(), i));
         }
     }
-    parts.sort_by_key(|(name, _)| {
-        numbered_part(
-            name,
-            if format == DocumentFormat::Pptx {
-                "ppt/slides/slide"
-            } else {
-                "xl/worksheets/sheet"
-            },
-        )
-        .unwrap_or(1)
-    });
+    if matches!(format, DocumentFormat::Pptx | DocumentFormat::Xlsx) {
+        parts = office_order::ordered_parts(archive, format, &parts, expanded_read)?;
+    }
     if parts.is_empty() {
         return Err(Error::extraction_failed("document has no supported parts"));
     }
@@ -148,19 +142,6 @@ fn office_parts(
 }
 fn failed(error: impl std::fmt::Display) -> Error {
     Error::extraction_failed(&error.to_string())
-}
-fn numbered_part(name: &str, prefix: &str) -> Option<u32> {
-    name.strip_prefix(prefix)?
-        .strip_suffix(".xml")?
-        .parse()
-        .ok()
-}
-fn bound_text(text: &str, limit: usize) -> String {
-    let mut end = text.len().min(limit);
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    text[..end].to_owned()
 }
 fn xml_strings(xml: &[u8]) -> Result<Vec<String>> {
     let mut result = Vec::new();
@@ -175,8 +156,12 @@ fn xml_strings(xml: &[u8]) -> Result<Vec<String>> {
     })?;
     Ok(result)
 }
-fn xml_text(xml: &[u8], shared: &[String]) -> Result<String> {
-    let mut output = String::new();
+fn xml_text(xml: &[u8], shared: &[String], limit: usize) -> Result<TextSink> {
+    let mut output = TextSink {
+        text: String::with_capacity(limit),
+        limit,
+        truncated: false,
+    };
     let mut shared_cell = false;
     let mut value = false;
     let mut current = String::new();
@@ -205,14 +190,28 @@ fn xml_text(xml: &[u8], shared: &[String]) -> Result<String> {
             }
             Event::Text(e) if in_text || value => {
                 let decoded = e.decode().map_err(failed)?;
-                current.push_str(&decoded);
+                if value && shared_cell {
+                    append_index(&mut current, &decoded)?;
+                } else {
+                    output.append(&decoded);
+                }
             }
             Event::GeneralRef(e) if in_text || value => {
                 let name = e.decode().map_err(failed)?;
-                current.push_str(&decode_reference(&name)?);
+                let decoded = decode_reference(&name)?;
+                if value && shared_cell {
+                    append_index(&mut current, &decoded)?;
+                } else {
+                    output.append(&decoded);
+                }
             }
             Event::CData(e) if in_text || value => {
-                current.push_str(&e.decode().map_err(failed)?);
+                let decoded = e.decode().map_err(failed)?;
+                if value && shared_cell {
+                    append_index(&mut current, &decoded)?;
+                } else {
+                    output.append(&decoded);
+                }
             }
             Event::End(e) => {
                 depth = depth
@@ -222,18 +221,16 @@ fn xml_text(xml: &[u8], shared: &[String]) -> Result<String> {
                 if local.as_ref() == b"t" || local.as_ref() == b"v" {
                     if value && shared_cell {
                         let index: usize = current.parse().map_err(failed)?;
-                        output.push_str(shared.get(index).ok_or_else(|| {
+                        output.append(shared.get(index).ok_or_else(|| {
                             Error::extraction_failed("invalid shared string index")
                         })?);
-                    } else {
-                        output.push_str(&current);
                     }
                     current.clear();
                     in_text = false;
                     value = false;
                 }
                 if [b"p".as_slice(), b"row", b"c"].contains(&local.as_ref()) {
-                    output.push('\n');
+                    output.append("\n");
                 }
             }
             Event::DocType(_) => {
@@ -249,6 +246,13 @@ fn xml_text(xml: &[u8], shared: &[String]) -> Result<String> {
         }
     }
     Ok(output)
+}
+fn append_index(current: &mut String, value: &str) -> Result<()> {
+    if current.len().saturating_add(value.len()) > 20 {
+        return Err(Error::extraction_failed("shared string index is too long"));
+    }
+    current.push_str(value);
+    Ok(())
 }
 fn decode_reference(name: &str) -> Result<String> {
     quick_xml::escape::unescape(&format!("&{name};"))
@@ -347,12 +351,24 @@ struct TextSink {
     limit: usize,
     truncated: bool,
 }
+impl TextSink {
+    fn append(&mut self, text: &str) {
+        if self.truncated {
+            return;
+        }
+        let remaining = self.limit.saturating_sub(self.text.len());
+        let mut end = text.len().min(remaining);
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.truncated |= end < text.len();
+        self.text.push_str(&text[..end]);
+    }
+}
 impl std::io::Write for TextSink {
     fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
         let text = std::str::from_utf8(bytes).map_err(std::io::Error::other)?;
-        let bounded = bound_text(text, self.limit.saturating_sub(self.text.len()));
-        self.truncated |= bounded.len() < bytes.len();
-        self.text.push_str(&bounded);
+        self.append(text);
         Ok(bytes.len())
     }
     fn flush(&mut self) -> std::io::Result<()> {
