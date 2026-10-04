@@ -217,3 +217,30 @@ fn alternate_footer_signatures_in_metadata_fail_closed() {
     let bytes = writer.finish().unwrap().into_inner();
     assert!(extract_docx(&bytes).is_err());
 }
+
+#[test]
+fn rejects_duplicate_raw_member_names_before_the_zip_index_can_deduplicate_them() {
+    let original = "word/document.xml";
+    let mut bytes = fixture(&[
+        (original, b"<t>first body</t>"),
+        ("word/otherxxx.xml", b"<t>second body</t>"),
+    ]);
+    let metadata = directory(&bytes).unwrap();
+    let first = metadata.start;
+    let next = first
+        + 46
+        + usize::try_from(number(&bytes, first + 28, 2).unwrap()).unwrap()
+        + usize::try_from(number(&bytes, first + 30, 2).unwrap()).unwrap()
+        + usize::try_from(number(&bytes, first + 32, 2).unwrap()).unwrap();
+    let local = usize::try_from(number(&bytes, next + 42, 4).unwrap()).unwrap();
+    assert_eq!(
+        usize::try_from(number(&bytes, next + 28, 2).unwrap()).unwrap(),
+        original.len()
+    );
+    // Preserve both valid records, payloads and CRCs while giving the two local
+    // and central headers the same raw name. ZipWriter disallows this fixture.
+    bytes[next + 46..next + 46 + original.len()].copy_from_slice(original.as_bytes());
+    bytes[local + 30..local + 30 + original.len()].copy_from_slice(original.as_bytes());
+    let error = extract_docx(&bytes).unwrap_err();
+    assert!(error.to_string().contains("duplicate ZIP member name"));
+}

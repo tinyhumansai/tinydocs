@@ -1,7 +1,8 @@
-//! Allocation-free ZIP central-directory admission before the eager ZIP parser.
+//! Bounded ZIP central-directory admission before the eager ZIP parser.
 
 use super::MAX_ENTRIES;
 use crate::{Error, Result};
+use std::collections::HashSet;
 
 fn invalid() -> Error {
     Error::extraction_failed("invalid ZIP central directory")
@@ -31,7 +32,9 @@ fn footer_offset(bytes: &[u8]) -> Result<usize> {
 
 /// Bound all eagerly allocated ZIP metadata before opening the archive.
 /// Counts, directory size, decoded names, extras, comments and ZIP64 metadata
-/// are admitted without allocation. Ambiguous alternative metadata footers
+/// are checked before indexing; duplicate-name detection borrows the input
+/// bytes and allocates only a set bounded by the admitted member count.
+/// Ambiguous alternative metadata footers
 /// fail closed; footer signatures in payloads are hidden during indexing.
 fn directory(bytes: &[u8]) -> Result<Directory> {
     let end = footer_offset(bytes)?;
@@ -150,6 +153,7 @@ pub(super) fn zip_preflight(bytes: &[u8]) -> Result<()> {
     }
     let mut cursor = start;
     let mut names = 0usize;
+    let mut raw_names = HashSet::with_capacity(usize::try_from(count).map_err(|_| invalid())?);
     for _ in 0..count {
         if bytes.get(cursor..cursor.saturating_add(4)) != Some(b"PK\x01\x02") {
             return Err(invalid());
@@ -196,6 +200,9 @@ pub(super) fn zip_preflight(bytes: &[u8]) -> Result<()> {
             return Err(Error::extraction_failed(
                 "ZIP admission name limit exceeded",
             ));
+        }
+        if !raw_names.insert(name) {
+            return Err(Error::extraction_failed("duplicate ZIP member name"));
         }
         cursor = next;
     }

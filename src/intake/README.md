@@ -7,9 +7,11 @@ vision, not a determination that the page contains an image or needs OCR.
 
 The library accepts at most 64 MiB of input, 2,048 ZIP members, 32 MiB of declared
 and read ZIP expansion, 8 MiB per member, 256-byte member names, and 128 nested
-XML elements. An allocation-free admission pass checks member counts, decoded
+XML elements. A bounded metadata admission pass checks member counts, decoded
 names and at most 1 MiB each of central-directory and ZIP64 footer metadata
-before constructing the eager ZIP index. Alternative footer signatures in
+before constructing the eager ZIP index. Raw duplicate names are rejected in
+a set capped at 2,048 borrowed names, before the ZIP library can deduplicate
+them. Alternative footer signatures in
 metadata are rejected conservatively; signatures in member payloads are hidden
 only while indexing, so the parser cannot fall back to an unadmitted archive.
 DTDs, unresolved entities, encrypted ZIP/PDF documents, duplicate member names
