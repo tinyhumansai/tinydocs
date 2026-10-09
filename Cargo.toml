@@ -29,12 +29,12 @@ resolver = "3"
 
 [workspace.package]
 # Releases update this sole workspace version before packaging every crate.
-version = "0.1.21"
+version = "0.1.22"
 
 [dependencies]
 # The dependency-light TinyBus contract owns payload types and errors. Re-export
 # it so library and bus callers use the exact same values.
-tinydocs-bus = { version = "0.1.21", path = "crates/tinydocs-bus" }
+tinydocs-bus = { version = "0.1.22", path = "crates/tinydocs-bus" }
 # OOXML `.docx` synthesis. Optional: exclusive to the `docx` feature so a host
 # that only needs extraction does not pull the writer stack.
 docx-rs = { version = "0.4.20", optional = true }
