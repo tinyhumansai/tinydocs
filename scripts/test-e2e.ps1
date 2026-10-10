@@ -1,6 +1,12 @@
 $ErrorActionPreference = 'Stop'
 
-cargo build --locked --release --package tinydocs-module
+$manifest = Get-Content 'crates/tinydocs-module/Cargo.toml' -Raw
+$match = [regex]::Match($manifest, '(?m)^rust-version\s*=\s*"([^"]+)"\s*$')
+if (-not $match.Success) { throw 'could not read rust-version from crates/tinydocs-module/Cargo.toml' }
+$msrv = $match.Groups[1].Value
+rustup toolchain install $msrv --profile minimal
+if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+cargo "+$msrv" build --locked --release --package tinydocs-module
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
 $artifact = Join-Path $PWD 'target/release/tinydocs_module.dll'
@@ -32,5 +38,5 @@ $moduleName = Split-Path -Leaf $testModule
     Set-Content -LiteralPath (Join-Path $testDirectory 'modules.toml') -Encoding utf8NoBOM
 
 $env:TINYDOCS_TEST_MODULE = $testModule
-cargo test --locked --release --package tinydocs-module --test module_e2e -- --ignored
+cargo "+$msrv" test --locked --release --package tinydocs-module --test module_e2e -- --ignored
 exit $LASTEXITCODE

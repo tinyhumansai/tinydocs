@@ -11,7 +11,13 @@ case "${RUNNER_OS:-$(uname -s)}" in
   *) echo "unsupported test host: ${RUNNER_OS:-$(uname -s)}" >&2; exit 1 ;;
 esac
 
-cargo build --locked --release --package tinydocs-module
+msrv="$(sed -nE 's/^rust-version = "([^"]+)"$/\1/p' crates/tinydocs-module/Cargo.toml)"
+if [[ -z "$msrv" ]]; then
+  echo "could not read rust-version from crates/tinydocs-module/Cargo.toml" >&2
+  exit 1
+fi
+rustup toolchain install "$msrv" --profile minimal
+cargo "+$msrv" build --locked --release --package tinydocs-module
 
 if [[ ! -f "$artifact" ]]; then
   echo "built module artifact was not found: $artifact" >&2
@@ -31,4 +37,4 @@ printf '"%s" = "%s"\n' "$(basename "$test_module")" "$module_hash" \
   > "$test_dir/modules.toml"
 
 TINYDOCS_TEST_MODULE="$PWD/$test_module" \
-  cargo test --locked --release --package tinydocs-module --test module_e2e -- --ignored
+  cargo "+$msrv" test --locked --release --package tinydocs-module --test module_e2e -- --ignored
