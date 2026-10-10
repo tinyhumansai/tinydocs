@@ -15,10 +15,10 @@ fn png(width: u32, height: u32) -> Vec<u8> {
 }
 
 fn jpeg(width: u16, height: u16) -> Vec<u8> {
-    let mut out = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 11, 8];
+    let mut out = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 17, 8];
     out.extend_from_slice(&height.to_be_bytes());
     out.extend_from_slice(&width.to_be_bytes());
-    out.extend_from_slice(&[3, 0, 0, 0, 0xFF, 0xD9]);
+    out.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xD9]);
     out
 }
 
@@ -51,23 +51,40 @@ fn rejects_zero_dimensions_and_missing_png_ihdr() {
 }
 
 #[test]
+fn rejects_png_ihdr_with_wrong_declared_length() {
+    let mut bytes = png(4, 4);
+    bytes[8..12].copy_from_slice(&12u32.to_be_bytes());
+    assert!(inspect(&bytes).is_err());
+}
+
+#[test]
 fn jpeg_skips_standalone_markers_and_non_frame_segments() {
     let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xD0, 0xFF, 0xFF, 0xFF, 0xC4, 0, 4, 0, 0];
-    bytes.extend_from_slice(&[0xFF, 0xC0, 0, 11, 8]);
+    bytes.extend_from_slice(&[0xFF, 0xC0, 0, 17, 8]);
     bytes.extend_from_slice(&11u16.to_be_bytes());
     bytes.extend_from_slice(&22u16.to_be_bytes());
-    bytes.extend_from_slice(&[3, 0, 0, 0]);
+    bytes.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let facts = inspect(&bytes).expect("SOF after standalone and DHT markers");
     assert_eq!((facts.width_px, facts.height_px), (22, 11));
 }
 
 #[test]
 fn jpeg_treats_tem_as_a_standalone_marker_before_the_frame() {
-    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0x01, 0xFF, 0xC0, 0, 11, 8];
+    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0x01, 0xFF, 0xC0, 0, 17, 8];
     bytes.extend_from_slice(&33u16.to_be_bytes());
     bytes.extend_from_slice(&44u16.to_be_bytes());
-    bytes.extend_from_slice(&[3, 0, 0, 0]);
+    bytes.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
     let facts = inspect(&bytes).expect("TEM does not carry a length field");
+    assert_eq!((facts.width_px, facts.height_px), (44, 33));
+}
+
+#[test]
+fn jpeg_skips_repeated_marker_fill_bytes() {
+    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xFF, 0xC0, 0, 17, 8];
+    bytes.extend_from_slice(&33u16.to_be_bytes());
+    bytes.extend_from_slice(&44u16.to_be_bytes());
+    bytes.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    let facts = inspect(&bytes).expect("fill bytes before a marker are ignored");
     assert_eq!((facts.width_px, facts.height_px), (44, 33));
 }
 
@@ -76,6 +93,33 @@ fn rejects_jpeg_without_a_frame_or_with_invalid_segment_length() {
     assert!(inspect(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xD9]).is_err());
     assert!(inspect(&[0xFF, 0xD8, 0xFF, 0xE0, 0, 1, 0, 0]).is_err());
     assert!(inspect(&[0xFF, 0xD8, 0xFF, 0xE0]).is_err());
+}
+
+#[test]
+fn rejects_jpeg_sof_when_declared_segment_is_shorter_than_dimensions() {
+    // The dimension-looking bytes exist in the input, but lie beyond the SOF segment.
+    let bytes = [0xFF, 0xD8, 0xFF, 0xC0, 0, 2, 8, 0, 33, 0, 44, 3, 0, 0];
+    assert!(inspect(&bytes).is_err());
+}
+
+#[test]
+fn rejects_jpeg_sof_when_declared_segment_runs_past_input() {
+    let bytes = [0xFF, 0xD8, 0xFF, 0xC0, 0, 11, 8, 0, 33, 0, 44];
+    assert!(inspect(&bytes).is_err());
+}
+
+#[test]
+fn rejects_jpeg_sof_after_scan_data_or_end_marker() {
+    let sof = [
+        0xFF, 0xC0, 0, 17, 8, 0, 33, 0, 44, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    let mut after_scan = vec![0xFF, 0xD8, 0xFF, 0xDA, 0, 2, 0x11, 0xFF, 0xC0];
+    after_scan.extend_from_slice(&sof[4..]);
+    assert!(inspect(&after_scan).is_err());
+
+    let mut after_eoi = vec![0xFF, 0xD8, 0xFF, 0xD9];
+    after_eoi.extend_from_slice(&sof);
+    assert!(inspect(&after_eoi).is_err());
 }
 
 #[test]

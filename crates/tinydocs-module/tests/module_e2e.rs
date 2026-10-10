@@ -531,10 +531,10 @@ fn png_padded_to(total: usize) -> Vec<u8> {
 
 /// Minimal JPEG whose SOF declares `width × height`.
 fn jpeg(width: u16, height: u16) -> Vec<u8> {
-    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 11, 8];
+    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 17, 8];
     bytes.extend_from_slice(&height.to_be_bytes());
     bytes.extend_from_slice(&width.to_be_bytes());
-    bytes.extend_from_slice(&[3, 0, 0, 0, 0xFF, 0xD9]);
+    bytes.extend_from_slice(&[3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xFF, 0xD9]);
     bytes
 }
 

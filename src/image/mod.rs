@@ -112,7 +112,7 @@ fn dimensions(format: ImageFormat, bytes: &[u8]) -> Option<(u32, u32)> {
 
 /// PNG: 8-byte signature, then an `IHDR` chunk with big-endian dimensions.
 fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
-    if bytes.len() < 24 || &bytes[12..16] != b"IHDR" {
+    if bytes.len() < 33 || bytes[8..12] != 13u32.to_be_bytes() || &bytes[12..16] != b"IHDR" {
         return None;
     }
     let width = u32::from_be_bytes([bytes[16], bytes[17], bytes[18], bytes[19]]);
@@ -123,26 +123,31 @@ fn png_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
 /// JPEG: walk marker segments until a start-of-frame segment supplies dimensions.
 fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
     let mut index = 2;
-    while index + 3 < bytes.len() {
+    while index < bytes.len() {
         if bytes[index] != 0xFF {
-            index += 1;
-            continue;
-        }
-        let marker = bytes[index + 1];
-        index += 2;
-        if marker == 0xFF
-            || marker == 0x01
-            || marker == 0xD8
-            || marker == 0xD9
-            || (0xD0..=0xD7).contains(&marker)
-        {
-            continue;
-        }
-        if index + 1 >= bytes.len() {
             return None;
         }
-        let segment_len = usize::from(u16::from_be_bytes([bytes[index], bytes[index + 1]]));
+        // JPEG permits any number of 0xFF fill bytes before the marker code.
+        while bytes.get(index) == Some(&0xFF) {
+            index += 1;
+        }
+        let marker = *bytes.get(index)?;
+        index += 1;
+
+        // A frame header cannot be found after entropy-coded scan data or EOI.
+        if matches!(marker, 0xDA | 0xD9 | 0x00) {
+            return None;
+        }
+        if marker == 0x01 || marker == 0xD8 || (0xD0..=0xD7).contains(&marker) {
+            continue;
+        }
+        let length_bytes = bytes.get(index..index.checked_add(2)?)?;
+        let segment_len = usize::from(u16::from_be_bytes([length_bytes[0], length_bytes[1]]));
         if segment_len < 2 {
+            return None;
+        }
+        let segment_end = index.checked_add(segment_len)?;
+        if segment_end > bytes.len() {
             return None;
         }
         let is_sof = matches!(
@@ -161,14 +166,19 @@ fn jpeg_dimensions(bytes: &[u8]) -> Option<(u32, u32)> {
                 | 0xCF
         );
         if is_sof {
-            if index + 6 >= bytes.len() {
+            if segment_len < 8 {
+                return None;
+            }
+            let components = usize::from(*bytes.get(index + 7)?);
+            let expected_len = 8usize.checked_add(3usize.checked_mul(components)?)?;
+            if components == 0 || segment_len != expected_len {
                 return None;
             }
             let height = u32::from(u16::from_be_bytes([bytes[index + 3], bytes[index + 4]]));
             let width = u32::from(u16::from_be_bytes([bytes[index + 5], bytes[index + 6]]));
             return (width != 0 && height != 0).then_some((width, height));
         }
-        index += segment_len;
+        index = segment_end;
     }
     None
 }

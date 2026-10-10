@@ -94,6 +94,15 @@ holding it. PNG/JPEG header parsing belongs to this implementation and is
 available as `tinydocs::image::inspect`; the loadable module exposes the same
 operation over a bounded TinyBus stream.
 
+The parser source API now lives in the implementation. Replace calls to the
+former `ImageFormat::sniff` / `dimensions` and `SlideImage::from_bytes` APIs
+with `tinydocs::image::inspect` or `tinydocs::image::slide_image_from_bytes`.
+Bus-only hosts should dispatch `InspectImage` and use its `ImageFacts` result
+to populate the existing `SlideImage` fields alongside their original bytes.
+The serialized DTOs and existing bus argument counts are unchanged. The
+pre-1.0 workspace source API change requires a 0.2 minor release when packaged;
+version changes are handled by the release workflow.
+
 ## The spec is separable from the codec
 
 Every spec type, every limit, and every `validate` lives in `tinydocs::spec`,
