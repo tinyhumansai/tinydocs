@@ -22,7 +22,11 @@ test_dir="target/tinydocs-module-e2e"
 mkdir -p "$test_dir"
 test_module="$test_dir/$(basename "$artifact")"
 cp "$artifact" "$test_module"
-module_hash="$(shasum -a 256 "$test_module" | awk '{print $1}')"
+if command -v sha256sum >/dev/null 2>&1; then
+  module_hash="$(sha256sum "$test_module" | awk '{print $1}')"
+else
+  module_hash="$(shasum -a 256 "$test_module" | awk '{print $1}')"
+fi
 printf '"%s" = "%s"\n' "$(basename "$test_module")" "$module_hash" \
   > "$test_dir/modules.toml"
 
