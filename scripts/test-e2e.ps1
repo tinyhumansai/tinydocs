@@ -10,6 +10,17 @@ if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
 
 $testDirectory = Join-Path $PWD 'target/tinydocs-module-e2e'
 New-Item -ItemType Directory -Force $testDirectory | Out-Null
+# GitHub's Windows runner inherits broad write ACEs from D:\a. TinyBus checks
+# the staged module directory's DACL before loading it, so make this test-only
+# directory private to the runner, Administrators, and SYSTEM before staging.
+$identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
+$runnerSid = "*$($identity.User.Value):(OI)(CI)F"
+$adminSid = '*S-1-5-32-544:(OI)(CI)F'
+$systemSid = '*S-1-5-18:(OI)(CI)F'
+icacls $testDirectory /inheritance:r /grant:r $runnerSid $adminSid $systemSid | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "could not restrict module test directory permissions: $testDirectory" }
+icacls $testDirectory /setowner $identity.Name | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "could not set module test directory owner: $testDirectory" }
 $testModule = Join-Path $testDirectory 'tinydocs_module.dll'
 Copy-Item -LiteralPath $artifact -Destination $testModule -Force
 $moduleHash = (Get-FileHash -LiteralPath $testModule -Algorithm SHA256).Hash.ToLowerInvariant()
