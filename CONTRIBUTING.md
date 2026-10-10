@@ -8,7 +8,7 @@ this document is the short path through them.
 
 Install a stable Rust toolchain with Rust 2024 support (see `rust-version` in
 `Cargo.toml` for the minimum supported version), initialize the vendored
-submodules, then run the four checks CI runs:
+submodules, then run these baseline checks locally; the reusable CI workflow also runs the cross-platform module gates described above:
 
 ```sh
 git submodule update --init --recursive
