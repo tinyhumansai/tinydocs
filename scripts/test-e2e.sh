@@ -18,5 +18,13 @@ if [[ ! -f "$artifact" ]]; then
   exit 1
 fi
 
-TINYDOCS_TEST_MODULE="$PWD/$artifact" \
+test_dir="target/tinydocs-module-e2e"
+mkdir -p "$test_dir"
+test_module="$test_dir/$(basename "$artifact")"
+cp "$artifact" "$test_module"
+module_hash="$(shasum -a 256 "$test_module" | awk '{print $1}')"
+printf '"%s" = "%s"\n' "$(basename "$test_module")" "$module_hash" \
+  > "$test_dir/modules.toml"
+
+TINYDOCS_TEST_MODULE="$PWD/$test_module" \
   cargo test --locked --release --package tinydocs-module --test module_e2e -- --ignored
