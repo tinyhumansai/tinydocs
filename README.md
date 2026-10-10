@@ -173,11 +173,12 @@ tagged GitHub release with `ModuleHost::load_github_release`; the archive must
 be selected by its exact target-specific asset name and the release URL must
 point to the tag, not a moving branch.
 
-Run the real loader test locally after building the release artifact:
+Run the real loader test locally on Linux, macOS, or Windows. The script builds
+the release artifact for the current OS, stages it with its TinyBus admission
+digest, and runs the full module E2E test:
 
 ```sh
-TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
-  cargo test --package tinydocs-module --test module_e2e -- --ignored
+scripts/test-e2e.sh
 ```
 
 ## Feature flags
