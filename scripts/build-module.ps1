@@ -59,8 +59,9 @@ $extension = switch -Regex ($Target) {
 $libraryName = if ($extension -eq 'dylib') { 'libtinydocs_module.dylib' } elseif ($extension -eq 'so') { 'libtinydocs_module.so' } else { 'tinydocs_module.dll' }
 $library = Join-Path $targetRoot "$Target/release/$libraryName"
 Copy-Item -LiteralPath $library -Destination $stage
-$hash = (Get-FileHash -LiteralPath (Join-Path $stage 'tinydocs_module.dll') -Algorithm SHA256).Hash.ToLowerInvariant()
-'"tinydocs_module.dll" = "{0}"' -f $hash | Set-Content -Path (Join-Path $stage 'modules.toml') -Encoding utf8NoBOM
+$stagedLibrary = Join-Path $stage $libraryName
+$hash = (Get-FileHash -LiteralPath $stagedLibrary -Algorithm SHA256).Hash.ToLowerInvariant()
+'"{0}" = "{1}"' -f $libraryName, $hash | Set-Content -Path (Join-Path $stage 'modules.toml') -Encoding utf8NoBOM
 Copy-Item -LiteralPath 'LICENSE', 'README.md' -Destination $stage
 foreach ($file in $extraFiles) {
     $destination = Join-Path $stage $file
