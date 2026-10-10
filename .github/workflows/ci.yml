@@ -4,13 +4,16 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@main
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@6970b704b3fe414c3cf5c8e6d729b8ccae018756 # fix: checkout module CI submodules (#5)
     with:
       coverage-command: .github/scripts/check-file-coverage.sh 90 coverage.json
       msrv: "1.88"
