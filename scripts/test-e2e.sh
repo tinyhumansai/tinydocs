@@ -29,6 +29,7 @@ if [[ ! -f "$artifact" ]]; then
 fi
 
 test_dir="$target/tinydocs-module-e2e"
+rm -rf "$test_dir"
 mkdir -p "$test_dir"
 test_module="$test_dir/$(basename "$artifact")"
 cp "$artifact" "$test_module"
