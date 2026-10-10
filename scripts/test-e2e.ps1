@@ -29,6 +29,8 @@ $identity = [System.Security.Principal.WindowsIdentity]::GetCurrent()
 $runnerSid = "*$($identity.User.Value):(OI)(CI)F"
 $adminSid = '*S-1-5-32-544:(OI)(CI)F'
 $systemSid = '*S-1-5-18:(OI)(CI)F'
+icacls $testDirectory /reset | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "could not reset module test directory permissions: $testDirectory" }
 icacls $testDirectory /inheritance:r /grant:r $runnerSid $adminSid $systemSid | Out-Null
 if ($LASTEXITCODE -ne 0) { throw "could not restrict module test directory permissions: $testDirectory" }
 icacls $testDirectory /setowner $identity.Name | Out-Null
