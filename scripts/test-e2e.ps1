@@ -1,4 +1,7 @@
 $ErrorActionPreference = 'Stop'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+Set-Location $root
+$target = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $root 'target' }
 
 $manifest = Get-Content 'crates/tinydocs-module/Cargo.toml' -Raw
 $match = [regex]::Match($manifest, '(?m)^rust-version\s*=\s*"([^"]+)"\s*$')
@@ -9,12 +12,12 @@ if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 cargo "+$msrv" build --locked --release --package tinydocs-module
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-$artifact = Join-Path $PWD 'target/release/tinydocs_module.dll'
+$artifact = Join-Path $target 'release/tinydocs_module.dll'
 if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
     throw "built module artifact was not found: $artifact"
 }
 
-$testDirectory = Join-Path $PWD 'target/tinydocs-module-e2e'
+$testDirectory = Join-Path $target 'tinydocs-module-e2e'
 if (Test-Path -LiteralPath $testDirectory) {
     Remove-Item -LiteralPath $testDirectory -Recurse -Force
 }

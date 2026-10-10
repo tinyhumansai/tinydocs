@@ -1,13 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+target="${CARGO_TARGET_DIR:-$root/target}"
+cd "$root"
+
 case "${RUNNER_OS:-$(uname -s)}" in
   Windows|MINGW*|MSYS*|CYGWIN*)
     pwsh -NoProfile -File scripts/test-e2e.ps1
     exit
     ;;
-  macOS|Darwin) artifact="target/release/libtinydocs_module.dylib" ;;
-  Linux) artifact="target/release/libtinydocs_module.so" ;;
+  macOS|Darwin) artifact="$target/release/libtinydocs_module.dylib" ;;
+  Linux) artifact="$target/release/libtinydocs_module.so" ;;
   *) echo "unsupported test host: ${RUNNER_OS:-$(uname -s)}" >&2; exit 1 ;;
 esac
 
@@ -24,7 +28,7 @@ if [[ ! -f "$artifact" ]]; then
   exit 1
 fi
 
-test_dir="target/tinydocs-module-e2e"
+test_dir="$target/tinydocs-module-e2e"
 mkdir -p "$test_dir"
 test_module="$test_dir/$(basename "$artifact")"
 cp "$artifact" "$test_module"
