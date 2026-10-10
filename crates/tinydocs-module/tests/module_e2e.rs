@@ -16,7 +16,9 @@ use std::io::Write;
 
 use base64::Engine as _;
 use tinybus::Connection;
-use tinybus::test_support::{admit_module, start_bus, wait_until_idle, wait_until_serving};
+use tinybus_test_support::test_support::{
+    admit_module, start_bus, wait_until_idle, wait_until_serving,
+};
 use tinydocs_bus::{BUS_NAME, DocumentSection, DocumentSpec, METHODS, OBJECT_PATH, names::methods};
 use tinydocs_module::{OutputRef, hex_digest};
 
