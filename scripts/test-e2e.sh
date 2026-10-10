@@ -41,5 +41,5 @@ fi
 printf '"%s" = "%s"\n' "$(basename "$test_module")" "$module_hash" \
   > "$test_dir/modules.toml"
 
-TINYDOCS_TEST_MODULE="$PWD/$test_module" \
+TINYDOCS_TEST_MODULE="$test_module" \
   cargo "+$msrv" test --locked --release --package tinydocs-module --test module_e2e -- --ignored
