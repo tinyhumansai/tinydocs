@@ -20,7 +20,7 @@ if (-not $outputPath.StartsWith($rootPrefix, [StringComparison]::OrdinalIgnoreCa
 $cursor = $root
 foreach ($component in $OutputDir.Split($pathSeparators, [StringSplitOptions]::RemoveEmptyEntries)) {
     $cursor = Join-Path $cursor $component
-    if (Test-Path -LiteralPath $cursor -PathType Container -and ((Get-Item -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Output path contains a reparse point' }
+    if ((Test-Path -LiteralPath $cursor -PathType Container) -and ((Get-Item -LiteralPath $cursor).Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Output path contains a reparse point' }
 }
 New-Item -ItemType Directory -Force $outputPath | Out-Null
 $outputPath = (Resolve-Path -LiteralPath $outputPath).Path
