@@ -13,9 +13,8 @@ concurrency:
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@6970b704b3fe414c3cf5c8e6d729b8ccae018756 # fix: checkout module CI submodules (#5)
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@9a61faece81fca0f8b10840851b7390bd61a6e94 # default test, metadata-derived MSRV, and recursive submodule checkout
     with:
       coverage-command: .github/scripts/check-file-coverage.sh 90 coverage.json
-      msrv: "1.88"
       module-e2e-command: scripts/test-e2e.sh
       feature-test-command: cargo test --locked --all-features
