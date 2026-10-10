@@ -17,8 +17,8 @@ pub mod version;
 pub use error::{Error, Result};
 pub use names::{BUS_NAME, METHODS, OBJECT_PATH};
 pub use spec::{
-    DocumentSection, DocumentSpec, ImageFormat, PresentationSpec, SlideImage, SlideSpec,
-    WirePresentationSpec, WireSlideImage, WireSlideSpec,
+    DocumentSection, DocumentSpec, ImageFacts, ImageFormat, PresentationSpec, SlideImage,
+    SlideSpec, WirePresentationSpec, WireSlideImage, WireSlideSpec,
 };
 pub use version::{CONTRACT_VERSION, is_compatible};
 

@@ -20,6 +20,7 @@ use tinybus::broker::Broker;
 use tinybus::module::{ModuleHost, ModuleState};
 use tinybus::transport::memory::MemoryBus;
 use tinydocs_bus::{BUS_NAME, DocumentSection, DocumentSpec, METHODS, OBJECT_PATH, names::methods};
+use tinydocs_bus::{ImageFacts, ImageFormat};
 use tinydocs_module::{OutputRef, hex_digest};
 
 /// Every method the manifest must declare, in order.
@@ -46,6 +47,7 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
 
     generates_a_docx(&proxy).await;
+    inspects_images_through_bounded_streams(&client, &target).await;
     generates_a_pptx_from_a_streamed_image_pair(&client, &target, &proxy).await;
     extracts_text_from_a_streamed_pdf(&client, &target, &proxy).await;
     extracts_and_renders_document_intake(&client, &target, &proxy).await;
@@ -54,6 +56,61 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
 
     wait_until_idle(&modules).await;
     broker_task.abort();
+}
+
+/// Image bytes cross the module boundary as streams; only typed facts return.
+async fn inspects_images_through_bounded_streams(client: &Connection, target: &Target) {
+    for (bytes, format, width, height) in [
+        (png_padded_to(2_000), ImageFormat::Png, 1, 1),
+        (jpeg(640, 480), ImageFormat::Jpeg, 640, 480),
+    ] {
+        let facts: ImageFacts = client
+            .call_with_stream(
+                target.destination.clone(),
+                target.path.clone(),
+                target.interface.clone(),
+                tinybus::MemberName::new("InspectImage").unwrap(),
+                |stream| serde_json::json!([stream]),
+                &bytes,
+            )
+            .await
+            .expect("valid image should return facts");
+        assert_eq!(facts.format, format);
+        assert_eq!((facts.width_px, facts.height_px), (width, height));
+    }
+
+    let invalid: tinybus::Error = client
+        .call_with_stream::<()>(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new("InspectImage").unwrap(),
+            |stream| serde_json::json!([stream]),
+            b"truncated jpeg",
+        )
+        .await
+        .expect_err("malformed image bytes should be rejected");
+    assert_eq!(
+        invalid.wire_name(),
+        "ai.tinyhumans.tinydocs.Error.InvalidInput"
+    );
+
+    let oversized = vec![0; tinydocs_bus::spec::presentation::MAX_IMAGE_BYTES + 1];
+    let error: tinybus::Error = client
+        .call_with_stream::<()>(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new("InspectImage").unwrap(),
+            |stream| serde_json::json!([stream]),
+            &oversized,
+        )
+        .await
+        .expect_err("an image over the existing size limit should be rejected");
+    assert_eq!(
+        error.wire_name(),
+        "ai.tinyhumans.tinydocs.Error.InvalidInput"
+    );
 }
 
 /// The destination triple every streaming call needs.
@@ -470,6 +527,15 @@ fn png_padded_to(total: usize) -> Vec<u8> {
     out.extend_from_slice(b"IEND");
     out.extend_from_slice(&[0xAE, 0x42, 0x60, 0x82]);
     out
+}
+
+/// Minimal JPEG whose SOF declares `width × height`.
+fn jpeg(width: u16, height: u16) -> Vec<u8> {
+    let mut bytes = vec![0xFF, 0xD8, 0xFF, 0xE0, 0, 4, 0, 0, 0xFF, 0xC0, 0, 11, 8];
+    bytes.extend_from_slice(&height.to_be_bytes());
+    bytes.extend_from_slice(&width.to_be_bytes());
+    bytes.extend_from_slice(&[3, 0, 0, 0, 0xFF, 0xD9]);
+    bytes
 }
 
 /// A valid single-page PDF whose text layer holds `text`.

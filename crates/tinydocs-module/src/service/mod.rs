@@ -1,6 +1,6 @@
 //! `TinyBus` service boundary for the document surface.
 //!
-//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting eight methods:
+//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting nine methods:
 //!
 //! ```text
 //! GenerateDocx(DocumentSpec)                        -> OutputRef
@@ -11,6 +11,7 @@
 //! RenderPdf(spec, StreamRef)                         -> RenderedPdf
 //! ReadOutput(output_id, offset, len)                -> base64
 //! ReleaseOutput(output_id)                          -> ()
+//! InspectImage(StreamRef)                            -> ImageFacts
 //! ```
 //!
 //! # Payloads in and payloads out are not symmetric
@@ -37,6 +38,10 @@
 //! over-long stream is a named rejection rather than a deck with a corrupt
 //! picture in it.
 //!
+//! `InspectImage` takes a separate one-image stream capped at the existing 5 MiB
+//! limit. It returns shared image facts and leaves header interpretation in the
+//! `TinyDocs` implementation.
+//!
 //! # This replaces the `Docx` interface rather than extending it
 //!
 //! The previous interface returned `GenerateDocx(DocumentSpec) -> Vec<u8>`
@@ -56,11 +61,11 @@ use base64::engine::general_purpose::STANDARD as BASE64;
 use tinybus::stream::StreamRef;
 use tinybus::{Connection, Error as BusError, Result as BusResult};
 use tinydocs::spec::presentation::MAX_IMAGE_BYTES;
-use tinydocs::spec::{DocumentSpec, PresentationSpec, SlideImage, SlideSpec};
+use tinydocs::spec::{DocumentSpec, PresentationSpec, SlideSpec};
 use tinydocs::{Error, pdf, pptx};
 use tinydocs_bus::{
-    BUS_NAME, ExtractDocumentSpec, ExtractedDocument, OBJECT_PATH, RenderPdfSpec, RenderedPdf,
-    RenderedPdfPage,
+    BUS_NAME, ExtractDocumentSpec, ExtractedDocument, ImageFacts, OBJECT_PATH, RenderPdfSpec,
+    RenderedPdf, RenderedPdfPage,
 };
 
 use crate::outputs::{OutputError, OutputRef, OutputStore};
@@ -167,6 +172,12 @@ impl Documents {
             .release(&output_id, Instant::now())
             .map_err(|error| map_output_error(&error))
     }
+
+    /// Identify one bounded PNG/JPEG stream and return its typed image facts.
+    async fn inspect_image(&self, image: StreamRef) -> BusResult<ImageFacts> {
+        let bytes = self.read_image_stream(&image).await?;
+        blocking(move || tinydocs::image::inspect(&bytes)).await
+    }
 }
 
 impl Documents {
@@ -215,6 +226,28 @@ impl Documents {
                 // The bus's own message, which never carries payload bytes.
                 message: error.to_string(),
             })
+    }
+
+    /// Read one image stream under the presentation's existing per-image limit.
+    async fn read_image_stream(&self, stream: &StreamRef) -> BusResult<Vec<u8>> {
+        let declared_oversize = stream
+            .len
+            .is_some_and(|length| length > MAX_IMAGE_BYTES as u64);
+        let mut reader = self
+            .connection
+            .accept_stream(stream)
+            .map_err(|error| transfer_error(error.to_string()))?;
+        let bytes = reader
+            .read_to_end_capped(MAX_IMAGE_BYTES as u64)
+            .await
+            .map_err(|error| match error {
+                BusError::StreamTooLarge { .. } => invalid_image_size(),
+                other => transfer_error(other.to_string()),
+            })?;
+        if declared_oversize {
+            return Err(invalid_image_size());
+        }
+        Ok(bytes)
     }
 
     /// Turn a wire deck plus one concatenated image stream into a real spec.
@@ -298,7 +331,7 @@ impl Documents {
                         message: "declared image lengths do not fit the image stream".to_string(),
                     })?;
                 resolved.push(
-                    SlideImage::from_bytes(bytes.to_vec(), image.caption)
+                    tinydocs::image::slide_image_from_bytes(bytes.to_vec(), image.caption)
                         .map_err(|error| map_error(&error))?,
                 );
                 cursor = end;
@@ -318,6 +351,20 @@ impl Documents {
             theme: spec.theme,
             slides,
         })
+    }
+}
+
+fn invalid_image_size() -> BusError {
+    BusError::MethodFailed {
+        name: INVALID_INPUT_ERROR.to_string(),
+        message: format!("image must be ≤ {MAX_IMAGE_BYTES} bytes"),
+    }
+}
+
+fn transfer_error(message: String) -> BusError {
+    BusError::MethodFailed {
+        name: TRANSFER_FAILED_ERROR.to_string(),
+        message,
     }
 }
 
@@ -404,6 +451,7 @@ pub(crate) mod exports {
             "RenderPdf",
             "ReadOutput",
             "ReleaseOutput",
+            "InspectImage",
         ],
         signals = [],
         requires = [],

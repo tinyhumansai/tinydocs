@@ -90,8 +90,9 @@ without paying for a blocking hop.
 A presentation carries its images as bytes, not as paths or identifiers:
 resolving indirection is host policy — which directories an agent may read,
 whether an identifier belongs to the caller — and this crate has no business
-holding it. `SlideImage::from_bytes` does the mechanical half, identifying the
-format and reading the dimensions, and needs no writer to do it.
+holding it. PNG/JPEG header parsing belongs to this implementation and is
+available as `tinydocs::image::inspect`; the loadable module exposes the same
+operation over a bounded TinyBus stream.
 
 ## The spec is separable from the codec
 
@@ -254,7 +255,7 @@ both features. See [intake bounds](src/intake/README.md) and
 [rendering bounds](src/pdf_render/README.md) for limits and parser resource
 limitations. Existing generation and `ExtractText` payloads are unchanged.
 
-The new methods extend contract version 2 additively. A version-2 module from
+The intake methods extend contract version 2 additively. A version-2 module from
 an older release can still serve the original five methods but will not have
 `ExtractDocument` or `RenderPdf`; hosts must detect unavailable members and
 require a published module release for intake. Do not derive release checksums
@@ -269,3 +270,13 @@ module exposes `ConvertMarkdown` in contract version 3; hosts must pin a
 compatible published artifact before using it. See the [conversion spec](docs/specs/markdown-conversion.md)
 and [parser limits](src/markdown/README.md). Read the output through `ReadOutput`
 and explicitly release it with `ReleaseOutput`.
+
+## Image inspection
+
+Contract version 4 adds `InspectImage(StreamRef) -> ImageFacts`. The module
+receives one image through TinyBus streaming, applies the existing 5 MiB image
+limit, and returns only the PNG/JPEG format and dimensions. The byte parser
+lives in the implementation; the bus contract carries only the shared image
+facts DTO. Existing presentation generation still accepts one concatenated
+stream for all deck images and retains its previous per-image and aggregate
+limits.

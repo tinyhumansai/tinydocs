@@ -16,10 +16,9 @@
 //! answers in every host. A host resolves indirection under its own rules and
 //! hands over the resulting bytes.
 //!
-//! [`SlideImage::from_bytes`] does the mechanical half of that hand-off:
-//! identify the format and read the dimensions, or reject the bytes. It needs
-//! no format writer, so a host can build and validate a whole spec in a build
-//! with the `pptx` feature off.
+//! The serialized image facts are vocabulary only. The `TinyDocs` implementation
+//! interprets encoded headers and exposes that operation through its module;
+//! this contract validates declared fields and size limits only.
 
 use serde::{Deserialize, Serialize};
 
@@ -59,10 +58,8 @@ pub const MAX_IMAGE_BYTES: usize = 5 * 1024 * 1024;
 
 /// One image embedded on a slide.
 ///
-/// Construct with [`SlideImage::from_bytes`] rather than by hand: it derives
-/// `format` and the dimensions from the bytes, which keeps the three fields
-/// consistent by construction. [`PresentationSpec::validate`] re-checks that
-/// consistency, because a spec can also arrive over a wire.
+/// The implementation derives and verifies `format` and dimensions from the
+/// bytes before synthesis. The contract does not parse encoded headers.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct SlideImage {
@@ -77,42 +74,6 @@ pub struct SlideImage {
     /// Optional caption, rendered as a bullet beneath the image.
     #[serde(default)]
     pub caption: Option<String>,
-}
-
-impl SlideImage {
-    /// Identify and measure `bytes`, producing a consistent [`SlideImage`].
-    ///
-    /// # Errors
-    ///
-    /// Returns [`Error::InvalidInput`] when `bytes` is empty, exceeds
-    /// [`MAX_IMAGE_BYTES`], is not PNG or JPEG, or carries a header this crate
-    /// cannot measure.
-    pub fn from_bytes(bytes: Vec<u8>, caption: Option<String>) -> Result<Self> {
-        if bytes.is_empty() {
-            return Err(Error::invalid_input("bytes", "must not be empty"));
-        }
-        if bytes.len() > MAX_IMAGE_BYTES {
-            return Err(Error::invalid_input(
-                "bytes",
-                format!("must be ≤ {MAX_IMAGE_BYTES} bytes"),
-            ));
-        }
-        let format = ImageFormat::sniff(&bytes)
-            .ok_or_else(|| Error::invalid_input("bytes", "must be a PNG or JPEG image"))?;
-        let (width_px, height_px) = format.dimensions(&bytes).ok_or_else(|| {
-            Error::invalid_input(
-                "bytes",
-                format!("{format} header is truncated or malformed"),
-            )
-        })?;
-        Ok(Self {
-            bytes,
-            format,
-            width_px,
-            height_px,
-            caption,
-        })
-    }
 }
 
 /// One content slide of the deck, rendered in spec order.
@@ -188,14 +149,13 @@ impl PresentationSpec {
             .sum::<usize>()
     }
 
-    /// Check the spec against every documented size limit, and check that each
-    /// image's declared format and dimensions match its bytes.
+    /// Check the spec against every documented size limit and declared-value
+    /// invariant. The implementation interprets encoded image headers.
     ///
-    /// Callers do not have to invoke this: `pptx::generate` validates before it
-    /// synthesises anything. It is public so a host can reject a malformed spec
-    /// at its own boundary — an LLM tool call, say — and hand back the
-    /// structured [`Error::InvalidInput`] before paying for a blocking hop, a
-    /// process boundary, or a bus round trip.
+    /// The contract validates structure and declared fields. It does not parse
+    /// encoded image headers; `tinydocs::pptx::generate` checks those before
+    /// synthesis, and hosts can use the module's `InspectImage` operation when
+    /// they need image facts at their own boundary.
     ///
     /// # Errors
     ///
@@ -282,14 +242,7 @@ impl PresentationSpec {
         Ok(())
     }
 
-    /// Re-derive an image's format and dimensions from its bytes and reject any
-    /// disagreement with what the spec declares.
-    ///
-    /// [`SlideImage::from_bytes`] keeps the fields consistent by construction,
-    /// but a spec can also arrive as deserialized JSON, where the three fields
-    /// are independent. A declared format that does not match the bytes yields
-    /// a part the reader refuses to render, and declared dimensions that do not
-    /// match distort the image silently — both are worth a named rejection.
+    /// Check image fields that do not require interpreting encoded bytes.
     fn check_image(field: &str, image: &SlideImage) -> Result<()> {
         if image.bytes.is_empty() {
             return Err(Error::invalid_input(
@@ -303,28 +256,10 @@ impl PresentationSpec {
                 format!("must be ≤ {MAX_IMAGE_BYTES} bytes"),
             ));
         }
-        let sniffed = ImageFormat::sniff(&image.bytes).ok_or_else(|| {
-            Error::invalid_input(format!("{field}.bytes"), "must be a PNG or JPEG image")
-        })?;
-        if sniffed != image.format {
-            return Err(Error::invalid_input(
-                format!("{field}.format"),
-                format!("declared {} but the bytes are {sniffed}", image.format),
-            ));
-        }
-        let (width_px, height_px) = sniffed.dimensions(&image.bytes).ok_or_else(|| {
-            Error::invalid_input(
-                format!("{field}.bytes"),
-                format!("{sniffed} header is truncated or malformed"),
-            )
-        })?;
-        if (width_px, height_px) != (image.width_px, image.height_px) {
+        if image.width_px == 0 || image.height_px == 0 {
             return Err(Error::invalid_input(
                 format!("{field}.width_px"),
-                format!(
-                    "declared {}x{} but the bytes are {width_px}x{height_px}",
-                    image.width_px, image.height_px
-                ),
+                "width and height must be greater than zero",
             ));
         }
         if let Some(caption) = image.caption.as_deref() {

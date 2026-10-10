@@ -27,6 +27,7 @@ const DECLARED_METHODS: &[&str] = &[
     "RenderPdf",
     "ReadOutput",
     "ReleaseOutput",
+    "InspectImage",
 ];
 
 /// A service attached to a broker nothing else is on.

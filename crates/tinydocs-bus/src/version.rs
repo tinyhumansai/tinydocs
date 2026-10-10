@@ -2,10 +2,9 @@
 
 /// Current `TinyDocs` wire-contract version.
 ///
-/// Version 3 adds full Markdown conversion. Older modules retain their existing
-/// member signatures but do not serve `ConvertMarkdown`; hosts requiring it
+/// Version 4 adds bounded image inspection. Hosts requiring this operation
 /// must pin a compatible released artifact.
-pub const CONTRACT_VERSION: u32 = 3;
+pub const CONTRACT_VERSION: u32 = 4;
 
 /// Returns whether a host requiring `required` can bind to this contract.
 ///
