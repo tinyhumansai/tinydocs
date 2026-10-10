@@ -69,3 +69,26 @@ fn rejects_unknown_wire_fields_and_formats() {
         .is_err()
     );
 }
+
+#[test]
+fn complete_conversion_preserves_format_vocabulary_and_requires_version_three() {
+    assert_eq!(crate::CONTRACT_VERSION, 3);
+    assert!(crate::is_compatible(3));
+    assert!(!crate::is_compatible(2));
+    assert!(crate::METHODS.contains(&crate::names::methods::CONVERT_MARKDOWN));
+    for (format, wire) in [
+        (DocumentFormat::Pdf, "pdf"),
+        (DocumentFormat::Docx, "docx"),
+        (DocumentFormat::Pptx, "pptx"),
+        (DocumentFormat::Xlsx, "xlsx"),
+    ] {
+        assert_eq!(
+            serde_json::to_value(format).unwrap(),
+            serde_json::json!(wire)
+        );
+        assert_eq!(
+            serde_json::from_value::<DocumentFormat>(serde_json::json!(wire)).unwrap(),
+            format
+        );
+    }
+}

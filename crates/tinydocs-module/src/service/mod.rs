@@ -1,12 +1,13 @@
 //! `TinyBus` service boundary for the document surface.
 //!
-//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting seven methods:
+//! One object, `/ai/tinyhumans/tinydocs/Documents`, exporting eight methods:
 //!
 //! ```text
 //! GenerateDocx(DocumentSpec)                        -> OutputRef
 //! GeneratePptx(WirePresentationSpec, Option<Stream>) -> OutputRef
 //! ExtractText(StreamRef)                            -> OutputRef
 //! ExtractDocument(spec, StreamRef)                   -> ExtractedDocument
+//! ConvertMarkdown(format, StreamRef)                -> OutputRef
 //! RenderPdf(spec, StreamRef)                         -> RenderedPdf
 //! ReadOutput(output_id, offset, len)                -> base64
 //! ReleaseOutput(output_id)                          -> ()
@@ -131,6 +132,17 @@ impl Documents {
     ) -> BusResult<ExtractedDocument> {
         let bytes = self.read_stream(&document).await?;
         blocking(move || tinydocs::intake::extract(&bytes, &spec)).await
+    }
+
+    /// Convert a streamed document to the full normalized Markdown used by memory.
+    async fn convert_markdown(
+        &self,
+        format: tinydocs_bus::DocumentFormat,
+        document: StreamRef,
+    ) -> BusResult<OutputRef> {
+        let bytes = self.read_stream(&document).await?;
+        let markdown = blocking(move || tinydocs::markdown::convert(&bytes, format)).await?;
+        self.hold(markdown.into_bytes())
     }
 
     /// Render explicitly selected PDF pages and hold each PNG output.
@@ -388,6 +400,7 @@ pub(crate) mod exports {
             "GeneratePptx",
             "ExtractText",
             "ExtractDocument",
+            "ConvertMarkdown",
             "RenderPdf",
             "ReadOutput",
             "ReleaseOutput",

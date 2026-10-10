@@ -16,6 +16,8 @@ pub mod methods {
     pub const EXTRACT_TEXT: &str = "ExtractText";
     /// `ExtractDocument` — bounded document text and provenance from a stream.
     pub const EXTRACT_DOCUMENT: &str = "ExtractDocument";
+    /// `ConvertMarkdown` — convert a streamed Office/PDF document to full Markdown.
+    pub const CONVERT_MARKDOWN: &str = "ConvertMarkdown";
     /// `RenderPdf` — selected PDF pages as held PNG outputs.
     pub const RENDER_PDF: &str = "RenderPdf";
     /// `ReadOutput` — read a bounded base64-encoded output chunk.
@@ -25,11 +27,12 @@ pub mod methods {
 }
 
 /// All method names in the declaration order used by the module interface.
-pub const METHODS: [&str; 7] = [
+pub const METHODS: [&str; 8] = [
     methods::GENERATE_DOCX,
     methods::GENERATE_PPTX,
     methods::EXTRACT_TEXT,
     methods::EXTRACT_DOCUMENT,
+    methods::CONVERT_MARKDOWN,
     methods::RENDER_PDF,
     methods::READ_OUTPUT,
     methods::RELEASE_OUTPUT,

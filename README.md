@@ -137,6 +137,7 @@ GenerateDocx(DocumentSpec)                         -> OutputRef
 GeneratePptx(deck, Option<StreamRef>)              -> OutputRef
 ExtractText(StreamRef)                             -> OutputRef
 ExtractDocument(ExtractDocumentSpec, StreamRef)     -> ExtractedDocument
+ConvertMarkdown(DocumentFormat, StreamRef)          -> OutputRef
 RenderPdf(RenderPdfSpec, StreamRef)                 -> RenderedPdf
 ReadOutput(output_id, offset, len)                 -> base64
 ReleaseOutput(output_id)                           -> ()
@@ -259,3 +260,12 @@ an older release can still serve the original five methods but will not have
 require a published module release for intake. Do not derive release checksums
 from a local build. `OutputRef` is now defined in `tinydocs-bus` and remains
 re-exported by `tinydocs-module` with the same wire fields.
+
+## Complete memory conversion
+
+Optional `markdown` converts PDF, DOCX, PPTX, and XLSX to complete normalized
+Markdown, preserving TinyMemory OfficeConverter output semantics. The compiled
+module exposes `ConvertMarkdown` in contract version 3; hosts must pin a
+compatible published artifact before using it. See the [conversion spec](docs/specs/markdown-conversion.md)
+and [parser limits](src/markdown/README.md). Read the output through `ReadOutput`
+and explicitly release it with `ReleaseOutput`.
