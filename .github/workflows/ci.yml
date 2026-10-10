@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@dccefcc2d14adcad107a66b3e7d3177a9e6b27fc # E2E and MSRV use the manifest toolchain; default test; recursive submodules
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@40d135e9cf7ca23a31d79ef8e87ae3906d344428 # E2E/MSRV use root metadata; normalize manifest paths across OS
     with:
       coverage-command: .github/scripts/check-file-coverage.sh 90 coverage.json
       module-e2e-command: scripts/test-e2e.sh
