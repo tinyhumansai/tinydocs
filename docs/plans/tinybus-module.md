@@ -30,7 +30,5 @@ cargo clippy --all-targets --all-features -- -D warnings
 cargo build --all-targets --all-features
 cargo test --all-features
 .github/scripts/check-file-coverage.sh 90 coverage.json
-cargo build --locked --release --package tinydocs-module
-TINYDOCS_TEST_MODULE="$PWD/target/release/libtinydocs_module.so" \
-  cargo test --locked --package tinydocs-module --test module_e2e -- --ignored
+scripts/test-e2e.sh
 ```
