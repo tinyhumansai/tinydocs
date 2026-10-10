@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   module-ci:
-    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@5b815fcadc51d7836579c193ff25f1f733105e06 # E2E/MSRV use root metadata; normalize manifest paths across OS
+    uses: tinyhumansai/.github/.github/workflows/module-ci.yml@325f72acd97b5901399759d906d73e4c199b5cd7 # E2E/MSRV use root metadata; normalize manifest paths across OS
     with:
       coverage-script: scripts/check-coverage.sh
       module-e2e-script: scripts/test-e2e.sh
