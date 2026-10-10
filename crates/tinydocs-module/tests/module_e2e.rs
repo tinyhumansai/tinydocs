@@ -12,13 +12,11 @@
 
 #![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
 
-use std::{io::Write, time::Duration};
+use std::io::Write;
 
 use base64::Engine as _;
 use tinybus::Connection;
-use tinybus::broker::Broker;
-use tinybus::module::{ModuleHost, ModuleState};
-use tinybus::transport::memory::MemoryBus;
+use tinybus::test_support::{admit_module, start_bus, wait_until_idle, wait_until_serving};
 use tinydocs_bus::{BUS_NAME, DocumentSection, DocumentSpec, METHODS, OBJECT_PATH, names::methods};
 use tinydocs_module::{OutputRef, hex_digest};
 
@@ -38,9 +36,25 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     // One test rather than four: TinyBus never unloads a module and a second
     // load of the same artifact would collide on the well-known name, so every
     // format is exercised against the one admitted instance.
-    let (client, modules, broker_task) = admit_module();
-    let client = client.await;
-    wait_until_serving(&client).await;
+    let (modules, client, broker_task) = start_bus().await.unwrap();
+    let loaded = admit_module(&modules, "TINYDOCS_TEST_MODULE", "tinydocs-module").unwrap();
+    assert_eq!(loaded.name, "tinydocs-module");
+    assert_eq!(loaded.manifest.bus_name.as_str(), BUS_NAME);
+    assert_eq!(loaded.manifest.object_path.as_str(), OBJECT_PATH);
+    let declared: Vec<&str> = loaded
+        .manifest
+        .provides
+        .iter()
+        .flat_map(|interface| interface.methods.iter())
+        .map(tinybus::MemberName::as_str)
+        .collect();
+    assert_eq!(
+        declared, EXPECTED_METHODS,
+        "manifest methods drifted from the interface"
+    );
+    wait_until_serving(&client, BUS_NAME, std::time::Duration::from_secs(5))
+        .await
+        .unwrap();
 
     let target = Target::new();
     let proxy = client.proxy(BUS_NAME, OBJECT_PATH, BUS_NAME).unwrap();
@@ -51,7 +65,13 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     extracts_and_renders_document_intake(&client, &target, &proxy).await;
     refuses_a_stream_that_contradicts_the_spec(&client, &target).await;
 
-    wait_until_idle(&modules).await;
+    wait_until_idle(
+        &modules,
+        "tinydocs-module",
+        std::time::Duration::from_secs(5),
+    )
+    .await
+    .unwrap();
     broker_task.abort();
 }
 
@@ -70,81 +90,6 @@ impl Target {
             interface: tinybus::InterfaceName::new(BUS_NAME).unwrap(),
         }
     }
-}
-
-/// Load the built artifact and check its manifest against the interface.
-fn admit_module() -> (
-    impl std::future::Future<Output = Connection>,
-    ModuleHost,
-    tokio::task::JoinHandle<tinybus::Result<()>>,
-) {
-    let artifact =
-        std::env::var_os("TINYDOCS_TEST_MODULE").expect("TINYDOCS_TEST_MODULE must be set");
-    let bus = MemoryBus::new();
-    let broker = Broker::new();
-    let broker_task = broker.spawn(bus.clone());
-    let modules = ModuleHost::new(broker);
-
-    let loaded = modules.load_file(artifact).expect("module should load");
-    assert_eq!(loaded.name, "tinydocs-module");
-    assert_eq!(loaded.manifest.bus_name.as_str(), BUS_NAME);
-    assert_eq!(loaded.manifest.object_path.as_str(), OBJECT_PATH);
-    let declared: Vec<&str> = loaded
-        .manifest
-        .provides
-        .iter()
-        .flat_map(|interface| interface.methods.iter())
-        .map(tinybus::MemberName::as_str)
-        .collect();
-    assert_eq!(
-        declared, EXPECTED_METHODS,
-        "manifest methods drifted from the interface"
-    );
-
-    let connect = async move {
-        Connection::connect(bus.connect().await.unwrap())
-            .await
-            .unwrap()
-    };
-    (connect, modules, broker_task)
-}
-
-/// Wait for the module to claim its well-known name.
-async fn wait_until_serving(client: &Connection) {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            if client
-                .list_names()
-                .await
-                .unwrap()
-                .iter()
-                .any(|name| name.as_str() == BUS_NAME)
-            {
-                break;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("module should become ready");
-}
-
-/// A call reply can reach its caller just before the host retires its in-flight
-/// count. Accept that valid `Serving` snapshot briefly, but fail immediately if
-/// the module faulted or stopped and require it to settle back to `Ready`.
-async fn wait_until_idle(modules: &ModuleHost) {
-    tokio::time::timeout(Duration::from_secs(5), async {
-        loop {
-            let state = modules.list()[0].state.clone();
-            match state {
-                ModuleState::Ready => return,
-                ModuleState::Serving => tokio::task::yield_now().await,
-                other => panic!("module left service after E2E calls: {other:?}"),
-            }
-        }
-    })
-    .await
-    .expect("module should finish serving the final call");
 }
 
 /// No inbound payload, a held document out.
