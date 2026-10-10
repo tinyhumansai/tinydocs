@@ -1,5 +1,6 @@
 param([Parameter(Mandatory = $true)][string]$Archive)
 $ErrorActionPreference = 'Stop'
+$resolvedArchive = (Resolve-Path -LiteralPath $Archive).Path
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Set-Location $root
 $targetRoot = if ($env:CARGO_TARGET_DIR) { $env:CARGO_TARGET_DIR } else { Join-Path $root 'target' }
@@ -11,7 +12,6 @@ $work = Join-Path $targetRoot ("tinydocs-module-verify-$([System.Guid]::NewGuid(
 New-Item -ItemType Directory $work | Out-Null
 try {
     Add-Type -AssemblyName System.IO.Compression.FileSystem
-    $resolvedArchive = (Resolve-Path -LiteralPath $Archive).Path
     $zip = [System.IO.Compression.ZipFile]::OpenRead($resolvedArchive)
     try {
         foreach ($entry in $zip.Entries) {
@@ -24,7 +24,7 @@ try {
     } finally {
         $zip.Dispose()
     }
-    Expand-Archive -LiteralPath $Archive -DestinationPath $work
+    Expand-Archive -LiteralPath $resolvedArchive -DestinationPath $work
     $library = Join-Path $work 'tinydocs_module.dll'
     if (-not (Test-Path (Join-Path $work 'modules.toml'))) { throw 'modules.toml missing from archive' }
     $env:TINYDOCS_TEST_MODULE = $library
