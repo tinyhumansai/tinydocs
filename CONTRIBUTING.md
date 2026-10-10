@@ -52,6 +52,9 @@ regardless.
 
 ## Pull Request Checklist
 
+This repository follows the [TinyHumans module CI and release contract](https://github.com/tinyhumansai/.github/blob/main/docs/module-ci-contract.md),
+including the shared required checks and release archive format.
+
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
 - [ ] `cargo build --all-targets --all-features`
