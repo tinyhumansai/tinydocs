@@ -14,3 +14,6 @@ type, not compatible-looking duplicates.
 The module serves the `METHODS` at `BUS_NAME` and `OBJECT_PATH`. Keep changes
 here backward compatible or advance `CONTRACT_VERSION` according to the
 documented compatibility rule.
+
+Contract version 3 adds `ConvertMarkdown(DocumentFormat, StreamRef) -> OutputRef`
+without changing existing member arities. See the [conversion spec](../../docs/specs/markdown-conversion.md).

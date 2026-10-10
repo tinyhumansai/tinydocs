@@ -23,6 +23,7 @@ const DECLARED_METHODS: &[&str] = &[
     "GeneratePptx",
     "ExtractText",
     "ExtractDocument",
+    "ConvertMarkdown",
     "RenderPdf",
     "ReadOutput",
     "ReleaseOutput",

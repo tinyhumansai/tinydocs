@@ -2,9 +2,10 @@
 
 /// Current `TinyDocs` wire-contract version.
 ///
-/// Intake methods are additive to version 2. Older version-2 modules may not
-/// serve them; hosts must check method availability or require a newer release.
-pub const CONTRACT_VERSION: u32 = 2;
+/// Version 3 adds full Markdown conversion. Older modules retain their existing
+/// member signatures but do not serve `ConvertMarkdown`; hosts requiring it
+/// must pin a compatible released artifact.
+pub const CONTRACT_VERSION: u32 = 3;
 
 /// Returns whether a host requiring `required` can bind to this contract.
 ///

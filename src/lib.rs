@@ -105,3 +105,7 @@ pub mod intake;
 /// Selected PDF page rendering for host-owned vision/OCR.
 #[cfg(feature = "pdf-render")]
 pub mod pdf_render;
+
+/// Full normalized PDF/Office Markdown conversion for document ingestion.
+#[cfg(feature = "markdown")]
+pub mod markdown;

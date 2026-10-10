@@ -63,6 +63,8 @@ pdf-extract = { version = "0.12", optional = true }
 zip = { version = "8", default-features = false, features = ["deflate"], optional = true }
 # Streaming XML events avoid building attacker-controlled DOM trees.
 quick-xml = { version = "0.41", optional = true }
+# Workbook row conversion for document-memory Markdown; implementation only.
+calamine = { version = "0.36", optional = true }
 # Pure Rust PDF rasterization, isolated from the default extraction build.
 hayro = { version = "0.5", optional = true }
 
@@ -93,6 +95,8 @@ pptx = ["dep:ppt-rs"]
 pdf = ["dep:pdf-extract"]
 # Bounded DOCX/PPTX/XLSX and per-page PDF text intake.
 intake = ["pdf", "dep:zip", "dep:quick-xml"]
+# Full normalized Markdown conversion compatible with document-memory ingestion.
+markdown = ["intake", "dep:calamine"]
 # Selected PDF page rendering to PNG.
 pdf-render = ["pdf", "dep:hayro"]
 

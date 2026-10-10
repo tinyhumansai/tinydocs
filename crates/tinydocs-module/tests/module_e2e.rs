@@ -49,6 +49,7 @@ async fn the_built_module_serves_every_format_over_a_real_broker() {
     generates_a_pptx_from_a_streamed_image_pair(&client, &target, &proxy).await;
     extracts_text_from_a_streamed_pdf(&client, &target, &proxy).await;
     extracts_and_renders_document_intake(&client, &target, &proxy).await;
+    converts_complete_markdown(&client, &target, &proxy).await;
     refuses_a_stream_that_contradicts_the_spec(&client, &target).await;
 
     wait_until_idle(&modules).await;
@@ -370,6 +371,49 @@ async fn refuses_a_stream_that_contradicts_the_spec(client: &Connection, target:
         ),
         other => panic!("expected an InvalidInput refusal, got {other:?}"),
     }
+}
+
+/// Memory conversion returns complete Markdown through the output lifecycle.
+async fn converts_complete_markdown(client: &Connection, target: &Target, proxy: &tinybus::Proxy) {
+    let text = "Full memory conversion through the compiled module";
+    let docx = docx_with_text(text);
+    let output: OutputRef = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::CONVERT_MARKDOWN).unwrap(),
+            |stream| serde_json::json!([tinydocs_bus::DocumentFormat::Docx, stream]),
+            &docx,
+        )
+        .await
+        .expect("ConvertMarkdown should succeed");
+    assert_eq!(
+        String::from_utf8(download(proxy, &output).await).unwrap(),
+        text
+    );
+    proxy
+        .call::<()>(methods::RELEASE_OUTPUT, (output.output_id.clone(),))
+        .await
+        .expect("converted Markdown should be released");
+    proxy
+        .call::<String>(methods::READ_OUTPUT, (output.output_id, 0_u64, READ_CHUNK))
+        .await
+        .expect_err("released Markdown should no longer be readable");
+    let empty: tinybus::Result<OutputRef> = client
+        .call_with_stream(
+            target.destination.clone(),
+            target.path.clone(),
+            target.interface.clone(),
+            tinybus::MemberName::new(methods::CONVERT_MARKDOWN).unwrap(),
+            |stream| serde_json::json!([tinydocs_bus::DocumentFormat::Docx, stream]),
+            b"invalid archive",
+        )
+        .await;
+    assert!(
+        matches!(empty, Err(tinybus::Error::MethodFailed { name, .. })
+        if name == "ai.tinyhumans.tinydocs.Error.ExtractionFailed")
+    );
 }
 
 /// Read a held document back in chunks and verify its digest.
