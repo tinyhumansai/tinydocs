@@ -1961,7 +1961,7 @@ dependencies = [
  "docx-rs",
  "hayro",
  "pdf-extract",
- "png 0.17.16",
+ "png 0.18.1",
  "ppt-rs",
  "quick-xml 0.41.0",
  "serde_json",
