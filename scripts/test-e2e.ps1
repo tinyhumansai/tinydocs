@@ -9,6 +9,9 @@ if (-not (Test-Path -LiteralPath $artifact -PathType Leaf)) {
 }
 
 $testDirectory = Join-Path $PWD 'target/tinydocs-module-e2e'
+if (Test-Path -LiteralPath $testDirectory) {
+    Remove-Item -LiteralPath $testDirectory -Recurse -Force
+}
 New-Item -ItemType Directory -Force $testDirectory | Out-Null
 # GitHub's Windows runner inherits broad write ACEs from D:\a. TinyBus checks
 # the staged module directory's DACL before loading it, so make this test-only
