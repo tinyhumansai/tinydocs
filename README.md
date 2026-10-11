@@ -151,6 +151,7 @@ ConvertMarkdown(DocumentFormat, StreamRef)          -> OutputRef
 RenderPdf(RenderPdfSpec, StreamRef)                 -> RenderedPdf
 ReadOutput(output_id, offset, len)                 -> base64
 ReleaseOutput(output_id)                           -> ()
+InspectImage(StreamRef)                            -> ImageFacts
 ```
 
 Payloads in and payloads out are not symmetric, and the reason is worth knowing.
