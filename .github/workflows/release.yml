@@ -31,18 +31,18 @@ jobs:
       tag: ${{ steps.version.outputs.tag }}
       tinybus_version: ${{ steps.version.outputs.tinybus_version }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
           submodules: true
 
-      - uses: dtolnay/rust-toolchain@stable
+      - uses: dtolnay/rust-toolchain@e2a55d2ffb04f378e9626c28d38b36d230d1e12f # stable
         with:
           components: rustfmt, clippy
 
-      - uses: taiki-e/install-action@cargo-llvm-cov
+      - uses: taiki-e/install-action@70b10d055da4af0e46b2f7166e710204993798b3 # cargo-llvm-cov
 
-      - uses: Swatinem/rust-cache@v2
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
 
       - name: Check formatting
         run: cargo fmt --all -- --check
@@ -176,7 +176,7 @@ jobs:
             HEAD
 
       - name: Upload source packages
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808 # v4.3.3
         with:
           name: source-packages
           path: |
@@ -192,179 +192,29 @@ jobs:
           git push origin "HEAD:${GITHUB_REF_NAME}"
           git push origin "${RELEASE_TAG}"
 
-  native-bundles:
-    name: Module bundle (${{ matrix.id }})
+  module-release:
     needs: publish
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - id: ubuntu-22.04-x86_64
-            os: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
-          - id: ubuntu-22.04-arm64
-            os: ubuntu-22.04-arm
-            target: aarch64-unknown-linux-gnu
-          - id: ubuntu-24.04-x86_64
-            os: ubuntu-24.04
-            target: x86_64-unknown-linux-gnu
-          - id: ubuntu-24.04-arm64
-            os: ubuntu-24.04-arm
-            target: aarch64-unknown-linux-gnu
-          - id: macos-15-x86_64
-            os: macos-15-intel
-            target: x86_64-apple-darwin
-          - id: macos-15-arm64
-            os: macos-15
-            target: aarch64-apple-darwin
-          - id: macos-26-x86_64
-            os: macos-26-intel
-            target: x86_64-apple-darwin
-          - id: macos-26-arm64
-            os: macos-26
-            target: aarch64-apple-darwin
-          - id: windows-2022-x86_64
-            os: windows-2022
-            target: x86_64-pc-windows-msvc
-          - id: windows-2025-x86_64
-            os: windows-2025
-            target: x86_64-pc-windows-msvc
-          - id: windows-11-arm64
-            os: windows-11-arm
-            target: aarch64-pc-windows-msvc
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          ref: ${{ needs.publish.outputs.tag }}
-          persist-credentials: false
-          submodules: true
+    uses: tinyhumansai/.github/.github/workflows/module-release.yml@f4911b709333ee457da77e73b96aa9aec90d21ae
+    with:
+      tag: ${{ needs.publish.outputs.tag }}
+      version: ${{ needs.publish.outputs.next_version }}
+      module-crate: tinydocs-module
+      extra-packaged-files: '["docs/specs/tinybus-module.md"]'
 
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Verify native Rust target
-        shell: bash
-        env:
-          EXPECTED_TARGET: ${{ matrix.target }}
-        run: |
-          set -euo pipefail
-          actual_target="$(rustc -vV | sed -n 's/^host: //p')"
-          [[ "$actual_target" == "$EXPECTED_TARGET" ]]
-
-      - name: Build installable module
-        run: cargo build --locked --release --package tinydocs-module
-
-      - name: Assemble Unix module package
-        if: ${{ runner.os != 'Windows' }}
-        id: unix_package
-        shell: bash
-        env:
-          BUNDLE_ID: ${{ matrix.id }}
-          VERSION: ${{ needs.publish.outputs.next_version }}
-        run: |
-          set -euo pipefail
-
-          library_name="tinydocs_module"
-          case "$RUNNER_OS" in
-            Linux) module="target/release/lib${library_name}.so" ;;
-            macOS) module="target/release/lib${library_name}.dylib" ;;
-            *) echo "unsupported Unix runner: ${RUNNER_OS}" >&2; exit 1 ;;
-          esac
-          package_name="tinydocs-module-${VERSION}-${BUNDLE_ID}"
-          package_root="dist/${package_name}"
-          mkdir -p "$package_root"
-          install -m 755 "$module" "$package_root/"
-          install -m 644 LICENSE README.md docs/specs/tinybus-module.md "$package_root/"
-          module_name="$(basename "$module")"
-          module_hash="$(sha256sum "$package_root/$module_name" | awk '{print $1}')"
-          printf '"%s" = "%s"\n' "$module_name" "$module_hash" \
-            > "$package_root/modules.toml"
-          tar -C "$package_root" -czf "dist/${package_name}.tar.gz" .
-          echo "archive=dist/${package_name}.tar.gz" >> "$GITHUB_OUTPUT"
-
-      - name: Assemble Windows module package
-        if: ${{ runner.os == 'Windows' }}
-        id: windows_package
-        shell: pwsh
-        env:
-          BUNDLE_ID: ${{ matrix.id }}
-          VERSION: ${{ needs.publish.outputs.next_version }}
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $libraryName = 'tinydocs_module'
-          $module = "target/release/$libraryName.dll"
-          $packageName = "tinydocs-module-$env:VERSION-$env:BUNDLE_ID"
-          $packageRoot = "dist/$packageName"
-          New-Item -ItemType Directory -Force $packageRoot | Out-Null
-          Copy-Item -LiteralPath $module, 'LICENSE', 'README.md' -Destination $packageRoot
-          $hash = (Get-FileHash -LiteralPath $module -Algorithm SHA256).Hash.ToLowerInvariant()
-          $moduleName = Split-Path -Leaf $module
-          "`"$moduleName`" = `"$hash`"`n" |
-            Set-Content -Path "$packageRoot/modules.toml" -Encoding utf8NoBOM
-          Compress-Archive -Path "$packageRoot/*" -DestinationPath "dist/$packageName.zip"
-          "archive=dist/$packageName.zip" >> $env:GITHUB_OUTPUT
-
-      - name: Upload Unix module package
-        if: ${{ runner.os != 'Windows' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: tinydocs-module-${{ matrix.id }}
-          path: ${{ steps.unix_package.outputs.archive }}
-          if-no-files-found: error
-
-      - name: Upload Windows module package
-        if: ${{ runner.os == 'Windows' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: tinydocs-module-${{ matrix.id }}
-          path: ${{ steps.windows_package.outputs.archive }}
-          if-no-files-found: error
-
-  github-release:
-    name: Create GitHub release
+  source-release-assets:
+    name: Upload TinyDocs source packages
     needs:
       - publish
-      - native-bundles
+      - module-release
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          ref: ${{ needs.publish.outputs.tag }}
-          persist-credentials: false
-          submodules: true
-
-      - name: Download workflow artifacts
-        uses: actions/download-artifact@v8
-        with:
-          pattern: tinydocs-module-*
+          name: source-packages
           path: release-assets
-          merge-multiple: true
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - name: Create release checksum manifest with TinyBus
-        shell: bash
-        run: |
-          set -euo pipefail
-          mapfile -t assets < <(
-            find release-assets -type f \
-              \( -name '*.tar.gz' -o -name '*.zip' \) \
-              | sort
-          )
-          if [[ ${#assets[@]} -ne 11 ]]; then
-            printf 'expected 11 module archives, found %s:\n' "${#assets[@]}" >&2
-            find release-assets -type f -print >&2 || true
-            exit 1
-          fi
-          checksum_args=()
-          for asset in "${assets[@]}"; do checksum_args+=(--path "$asset"); done
-          cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
-            --package tinybus --all-features --bin tinybus -- \
-            modules checksum "${checksum_args[@]}" --output release-assets/checksum.toml
-
-      - name: Create release and upload assets
+      - name: Attach source packages to the shared module release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ needs.publish.outputs.tag }}
@@ -372,24 +222,6 @@ jobs:
         run: |
           set -euo pipefail
           mapfile -t release_files < <(find release-assets -type f | sort)
-          gh release create "$RELEASE_TAG" "${release_files[@]}" \
-            --repo "$REPOSITORY" \
-            --verify-tag \
-            --title "$RELEASE_TAG" \
-            --generate-notes
-
-      - name: Verify the published module through TinyBus
-        shell: bash
-        env:
-          RELEASE_TAG: ${{ needs.publish.outputs.tag }}
-          REPOSITORY: ${{ github.repository }}
-          VERSION: ${{ needs.publish.outputs.next_version }}
-        run: |
-          set -euo pipefail
-          archive="tinydocs-module-${VERSION}-ubuntu-24.04-x86_64.tar.gz"
-          release_url="https://github.com/${REPOSITORY}/releases/tag/${RELEASE_TAG}"
-          sha256="$(sed -n "s/^\"${archive}\" = \"\([0-9a-f]\{64\}\)\"$/\1/p" release-assets/checksum.toml)"
-          test -n "$sha256"
-          cargo run --manifest-path vendor/tinybus/Cargo.toml --locked \
-            --package tinybus --all-features --example github_module_host -- \
-            "$release_url" "$archive" "$sha256"
+          [[ ${#release_files[@]} -gt 0 ]]
+          gh release upload "$RELEASE_TAG" "${release_files[@]}" \
+            --repo "$REPOSITORY" --clobber

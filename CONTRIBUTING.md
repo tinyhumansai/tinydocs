@@ -8,7 +8,7 @@ this document is the short path through them.
 
 Install a stable Rust toolchain with Rust 2024 support (see `rust-version` in
 `Cargo.toml` for the minimum supported version), initialize the vendored
-submodules, then run the four checks CI runs:
+submodules, then run these baseline checks locally; the reusable CI workflow also runs the cross-platform module gates described above:
 
 ```sh
 git submodule update --init --recursive
@@ -51,6 +51,9 @@ Run `cargo deny check all` if you have `cargo-deny` installed; CI runs it
 regardless.
 
 ## Pull Request Checklist
+
+This repository follows the [TinyHumans module CI and release contract](https://github.com/tinyhumansai/.github/blob/main/docs/module-ci-contract.md),
+including the shared required checks and release archive format.
 
 - [ ] `cargo fmt --all -- --check`
 - [ ] `cargo clippy --all-targets --all-features -- -D warnings`
