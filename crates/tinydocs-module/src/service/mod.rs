@@ -230,9 +230,12 @@ impl Documents {
 
     /// Read one image stream under the presentation's existing per-image limit.
     async fn read_image_stream(&self, stream: &StreamRef) -> BusResult<Vec<u8>> {
-        let declared_oversize = stream
+        if stream
             .len
-            .is_some_and(|length| length > MAX_IMAGE_BYTES as u64);
+            .is_some_and(|length| length > MAX_IMAGE_BYTES as u64)
+        {
+            return Err(invalid_image_size());
+        }
         let mut reader = self
             .connection
             .accept_stream(stream)
@@ -244,9 +247,6 @@ impl Documents {
                 BusError::StreamTooLarge { .. } => invalid_image_size(),
                 other => transfer_error(other.to_string()),
             })?;
-        if declared_oversize {
-            return Err(invalid_image_size());
-        }
         Ok(bytes)
     }
 
