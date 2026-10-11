@@ -24,10 +24,12 @@ pub mod methods {
     pub const READ_OUTPUT: &str = "ReadOutput";
     /// `ReleaseOutput` — release a held output.
     pub const RELEASE_OUTPUT: &str = "ReleaseOutput";
+    /// `InspectImage` — interpret one bounded PNG/JPEG stream.
+    pub const INSPECT_IMAGE: &str = "InspectImage";
 }
 
 /// All method names in the declaration order used by the module interface.
-pub const METHODS: [&str; 8] = [
+pub const METHODS: [&str; 9] = [
     methods::GENERATE_DOCX,
     methods::GENERATE_PPTX,
     methods::EXTRACT_TEXT,
@@ -36,4 +38,5 @@ pub const METHODS: [&str; 8] = [
     methods::RENDER_PDF,
     methods::READ_OUTPUT,
     methods::RELEASE_OUTPUT,
+    methods::INSPECT_IMAGE,
 ];

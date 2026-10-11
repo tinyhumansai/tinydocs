@@ -27,6 +27,7 @@ const DECLARED_METHODS: &[&str] = &[
     "RenderPdf",
     "ReadOutput",
     "ReleaseOutput",
+    "InspectImage",
 ];
 
 /// A service attached to a broker nothing else is on.
@@ -239,6 +240,21 @@ async fn a_deck_declaring_images_without_a_stream_is_refused() {
         )
         .await
         .expect_err("a declared image with no stream should be refused");
+    assert_eq!(err.wire_name(), INVALID_INPUT_ERROR);
+}
+
+#[tokio::test]
+async fn an_oversized_declared_image_is_rejected_before_accepting_its_stream() {
+    let service = service().await;
+    let err = service
+        .read_image_stream(&StreamRef {
+            id: "not-an-open-stream".to_string(),
+            content_type: Some("image/png".to_string()),
+            len: Some(MAX_IMAGE_BYTES as u64 + 1),
+        })
+        .await
+        .expect_err("declared oversized images must be refused before stream lookup");
+
     assert_eq!(err.wire_name(), INVALID_INPUT_ERROR);
 }
 

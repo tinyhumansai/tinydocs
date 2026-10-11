@@ -15,6 +15,9 @@ use tinydocs::{
     docx::{self, DocumentSection, DocumentSpec},
 };
 
+#[cfg(feature = "pptx")]
+use tinydocs::pptx::{self, PresentationSpec, SlideSpec};
+
 fn spec() -> DocumentSpec {
     DocumentSpec {
         title: "Consumer Doc".to_string(),
@@ -30,6 +33,26 @@ fn spec() -> DocumentSpec {
 #[test]
 fn consumers_can_generate_a_docx() {
     let bytes = docx::generate(&spec()).expect("generation should succeed");
+    assert_eq!(&bytes[0..2], b"PK");
+}
+
+#[cfg(feature = "pptx")]
+#[test]
+fn consumers_can_generate_a_pptx() {
+    let bytes = pptx::generate(&PresentationSpec {
+        title: "Consumer Presentation".to_string(),
+        author: None,
+        theme: None,
+        slides: vec![SlideSpec {
+            title: "Slide".to_string(),
+            body: Some("Body text.".to_string()),
+            bullets: vec!["A bullet".to_string()],
+            speaker_notes: None,
+            images: vec![],
+        }],
+    })
+    .expect("generation should succeed");
+
     assert_eq!(&bytes[0..2], b"PK");
 }
 

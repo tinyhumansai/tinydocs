@@ -88,6 +88,9 @@
 
 pub use tinydocs_bus::spec;
 
+/// PNG/JPEG header interpretation and typed image facts.
+pub mod image;
+
 #[cfg(feature = "docx")]
 pub mod docx;
 

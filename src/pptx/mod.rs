@@ -84,9 +84,9 @@ const EMU_PER_PX: u32 = 9_525;
 ///
 /// # Errors
 ///
-/// - [`Error::InvalidInput`] if `spec` violates any documented limit, or if an
-///   image's declared format or dimensions contradict its bytes — no synthesis
-///   is attempted.
+/// - [`Error::InvalidInput`] if `spec` violates a documented limit, or if an
+///   image's declared format or dimensions contradict its encoded header — no
+///   synthesis is attempted.
 /// - [`Error::GenerationFailed`] if `ppt-rs` fails to pack the deck.
 ///
 /// # Examples
@@ -113,6 +113,7 @@ const EMU_PER_PX: u32 = 9_525;
 /// ```
 pub fn generate(spec: &PresentationSpec) -> Result<Vec<u8>> {
     spec.validate()?;
+    crate::image::validate_presentation_images(spec)?;
     create_pptx_with_content(&spec.title, build_slides(spec))
         // The writer's error type is not guaranteed to be `Send + Sync +
         // 'static`, so it is rendered to text at the boundary rather than

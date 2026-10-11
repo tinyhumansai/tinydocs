@@ -49,7 +49,8 @@ fn spec() -> PresentationSpec {
 }
 
 fn image(width: u32, height: u32, caption: Option<&str>) -> SlideImage {
-    SlideImage::from_bytes(png(width, height), caption.map(str::to_string)).expect("valid png")
+    crate::image::slide_image_from_bytes(png(width, height), caption.map(str::to_string))
+        .expect("valid png")
 }
 
 /// Entry names inside a produced `.pptx` byte buffer.
@@ -213,6 +214,39 @@ fn generate_validates_before_synthesising() {
     let mut s = spec();
     s.title = String::new();
     assert!(matches!(generate(&s), Err(Error::InvalidInput { .. })));
+}
+
+#[test]
+fn generate_rejects_image_facts_that_do_not_match_the_encoded_header() {
+    let mut wrong_format = spec();
+    let mut image_value = image(320, 200, None);
+    image_value.format = crate::spec::ImageFormat::Jpeg;
+    wrong_format.slides[0].images.push(image_value);
+    assert!(matches!(
+        generate(&wrong_format),
+        Err(Error::InvalidInput { field, .. }) if field.ends_with(".format")
+    ));
+
+    let mut wrong_dimensions = spec();
+    let mut image_value = image(320, 200, None);
+    image_value.width_px += 1;
+    wrong_dimensions.slides[0].images.push(image_value);
+    assert!(matches!(
+        generate(&wrong_dimensions),
+        Err(Error::InvalidInput { field, .. }) if field.ends_with(".width_px")
+    ));
+
+    let mut malformed_bytes = spec();
+    let mut image_value = image(320, 200, None);
+    image_value.bytes = b"not an image".to_vec();
+    malformed_bytes.slides[0].images.push(image_value);
+    assert!(matches!(
+        generate(&malformed_bytes),
+        Err(Error::InvalidInput { field, .. })
+            if std::path::Path::new(&field)
+                .extension()
+                .is_some_and(|extension| extension == "bytes")
+    ));
 }
 
 #[test]

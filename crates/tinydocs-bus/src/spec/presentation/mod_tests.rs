@@ -11,7 +11,6 @@ use super::{
 };
 use crate::Error;
 use crate::spec::image::ImageFormat;
-use crate::spec::image::test::{jpeg, png};
 
 /// One valid slide carrying a title, a body, and a bullet.
 fn slide() -> SlideSpec {
@@ -36,7 +35,13 @@ fn spec() -> PresentationSpec {
 
 /// A valid image built from real header bytes.
 fn image() -> SlideImage {
-    SlideImage::from_bytes(png(320, 200), Some("A chart".to_string())).expect("valid png")
+    SlideImage {
+        bytes: vec![1, 2, 3],
+        format: ImageFormat::Png,
+        width_px: 320,
+        height_px: 200,
+        caption: Some("A chart".to_string()),
+    }
 }
 
 /// Assert `spec` is rejected with an `InvalidInput` naming `field`.
@@ -208,80 +213,10 @@ fn rejects_an_over_long_image_caption() {
 }
 
 #[test]
-fn from_bytes_derives_format_and_dimensions() {
-    let img = SlideImage::from_bytes(png(1920, 1080), None).expect("valid png");
-    assert_eq!(img.format, ImageFormat::Png);
-    assert_eq!((img.width_px, img.height_px), (1920, 1080));
-    assert_eq!(img.caption, None);
-
-    let img = SlideImage::from_bytes(jpeg(640, 480), Some("j".to_string())).expect("valid jpeg");
-    assert_eq!(img.format, ImageFormat::Jpeg);
-    assert_eq!((img.width_px, img.height_px), (640, 480));
-}
-
-#[test]
-fn from_bytes_rejects_bad_input() {
-    assert!(matches!(
-        SlideImage::from_bytes(vec![], None),
-        Err(Error::InvalidInput { .. })
-    ));
-    assert!(matches!(
-        SlideImage::from_bytes(b"not an image".to_vec(), None),
-        Err(Error::InvalidInput { .. })
-    ));
-    // PNG signature with a truncated IHDR: the right format, unmeasurable.
-    assert!(matches!(
-        SlideImage::from_bytes(vec![0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], None),
-        Err(Error::InvalidInput { .. })
-    ));
-}
-
-#[test]
-fn from_bytes_rejects_an_oversize_image() {
-    // A real PNG header followed by enough filler to cross the cap, so the
-    // rejection is the size check rather than the sniff.
-    let mut bytes = png(8, 8);
-    bytes.resize(MAX_IMAGE_BYTES + 1, 0);
-    assert!(matches!(
-        SlideImage::from_bytes(bytes, None),
-        Err(Error::InvalidInput { .. })
-    ));
-}
-
-#[test]
-fn validate_rejects_an_image_whose_declared_format_contradicts_its_bytes() {
-    // `from_bytes` cannot produce this, but deserialized JSON can: the three
-    // fields are independent on the wire. A wrong format yields a part the
-    // reader refuses to render, so it is worth a named rejection.
-    let mut s = spec();
-    let mut img = image();
-    img.format = ImageFormat::Jpeg;
-    s.slides[0].images = vec![img];
-    assert_rejects(&s, "slides[0].images[0].format");
-}
-
-#[test]
-fn validate_rejects_an_image_whose_declared_dimensions_contradict_its_bytes() {
-    // Declared dimensions that disagree with the bytes distort the image
-    // silently, which is worse than failing.
-    let mut s = spec();
-    let mut img = image();
-    img.width_px += 1;
-    s.slides[0].images = vec![img];
-    assert_rejects(&s, "slides[0].images[0].width_px");
-}
-
-#[test]
-fn validate_rejects_empty_oversize_and_unrecognised_image_bytes() {
+fn validate_rejects_empty_and_oversize_image_bytes_without_parsing_them() {
     let mut s = spec();
     let mut img = image();
     img.bytes.clear();
-    s.slides[0].images = vec![img];
-    assert_rejects(&s, "slides[0].images[0].bytes");
-
-    let mut s = spec();
-    let mut img = image();
-    img.bytes = b"not an image".to_vec();
     s.slides[0].images = vec![img];
     assert_rejects(&s, "slides[0].images[0].bytes");
 
@@ -293,14 +228,22 @@ fn validate_rejects_empty_oversize_and_unrecognised_image_bytes() {
 }
 
 #[test]
-fn validate_rejects_an_image_with_an_unmeasurable_header() {
-    // Sniffs as PNG, but the IHDR is gone — measurement fails after the format
-    // check has already passed, which is a distinct branch.
+fn validation_keeps_encoded_image_interpretation_out_of_the_contract() {
     let mut s = spec();
     let mut img = image();
-    img.bytes.truncate(8);
+    img.bytes = b"not parsed by the vocabulary crate".to_vec();
+    img.width_px += 1;
     s.slides[0].images = vec![img];
-    assert_rejects(&s, "slides[0].images[0].bytes");
+    assert!(s.validate().is_ok());
+}
+
+#[test]
+fn validation_rejects_zero_dimensions_as_a_declared_value_error() {
+    let mut s = spec();
+    let mut img = image();
+    img.width_px = 0;
+    s.slides[0].images = vec![img];
+    assert_rejects(&s, "slides[0].images[0].width_px");
 }
 
 #[test]
