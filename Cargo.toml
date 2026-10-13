@@ -70,7 +70,7 @@ hayro = { version = "0.5", optional = true }
 
 [dev-dependencies]
 # Decode raster fixtures to assert scanned-page pixels survive rendering.
-png = "0.17"
+png = "0.18"
 # `.docx` output is a zip container; the tests re-open the produced bytes and
 # assert on the OOXML parts inside.
 zip = { version = "8", default-features = false, features = ["deflate"] }
