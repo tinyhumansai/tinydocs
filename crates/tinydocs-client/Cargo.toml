@@ -1,0 +1,32 @@
+[package]
+name = "tinydocs-client"
+version.workspace = true
+edition = "2024"
+rust-version = "1.88"
+license = "GPL-3.0-only"
+description = "Typed TinyBus client for the TinyDocs module."
+repository = "https://github.com/tinyhumansai/tinydocs"
+documentation = "https://docs.rs/tinydocs-client"
+keywords = ["tinybus", "document", "agent"]
+categories = ["api-bindings"]
+
+[dependencies]
+# Module loading and typed failure reporting stay host-owned; this is the
+# published host-facing SDK without its native loader.
+tinybus = { version = "0.3.11", default-features = false }
+# Shared wire names and payload DTOs.
+tinydocs-bus = { version = "0.2.5", path = "../tinydocs-bus" }
+# The held-output protocol uses base64 chunks and verifies their SHA-256 digest.
+base64 = "0.22"
+sha2 = "0.10"
+serde_json = "1"
+# Cancellation-safe output release schedules cleanup on the caller's runtime.
+tokio = { version = "1", features = ["rt", "time"] }
+tracing = "0.1"
+
+[dev-dependencies]
+async-trait = "0.1"
+tokio = { version = "1", features = ["macros", "rt", "sync", "time", "test-util"] }
+
+[lints]
+workspace = true
