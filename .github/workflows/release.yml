@@ -6,16 +6,6 @@ on:
         description: Existing version tag (vX.Y.Z) committed through a reviewed PR
         type: string
         required: true
-      release_mode:
-        description: Use the ordinary main path or reviewed-epic release admission
-        type: choice
-        options: [main, reviewed-epic]
-        default: main
-        required: true
-      reviewed_pr:
-        description: Positive canonical PR number whose merge commit the tag names (reviewed-epic mode only)
-        type: number
-        required: false
   push:
     tags: ['v*']
 permissions: {}
@@ -28,15 +18,11 @@ jobs:
     outputs:
       tag: ${{ steps.tag.outputs.tag }}
       version: ${{ steps.tag.outputs.version }}
-      release_mode: ${{ steps.tag.outputs.release_mode }}
-      reviewed_pr: ${{ steps.tag.outputs.reviewed_pr }}
     steps:
       - id: tag
         shell: bash
         env:
           TAG: ${{ github.event_name == 'push' && github.ref_name || inputs.tag }}
-          RELEASE_MODE: ${{ github.event_name == 'push' && 'main' || inputs.release_mode }}
-          REVIEWED_PR: ${{ inputs.reviewed_pr }}
         run: |
           set -euo pipefail
           [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([+-][0-9A-Za-z.-]+)?$ ]] || {
@@ -45,30 +31,8 @@ jobs:
           }
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           echo "version=${TAG#v}" >> "$GITHUB_OUTPUT"
-          [[ "$RELEASE_MODE" == main || "$RELEASE_MODE" == reviewed-epic ]] || {
-            echo "release_mode must be main or reviewed-epic" >&2
-            exit 2
-          }
-          if [[ "$RELEASE_MODE" == reviewed-epic ]]; then
-            [[ "$REVIEWED_PR" =~ ^[1-9][0-9]*$ ]] || {
-              echo "reviewed_pr must be a positive integer in reviewed-epic mode" >&2
-              exit 2
-            }
-          else
-            [[ -z "$REVIEWED_PR" || "$REVIEWED_PR" == 0 ]] || {
-              echo "reviewed_pr is only valid in reviewed-epic mode" >&2
-              exit 2
-            }
-            REVIEWED_PR=""
-          fi
-          {
-            echo "release_mode=$RELEASE_MODE"
-            # The reusable workflow input is numeric; zero is the ordinary-path sentinel.
-            echo "reviewed_pr=${REVIEWED_PR:-0}"
-          } >> "$GITHUB_OUTPUT"
   source-packages:
     needs: resolve
-    if: needs.resolve.outputs.release_mode == 'main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -95,26 +59,12 @@ jobs:
           if-no-files-found: error
   module-release:
     needs: [resolve, source-packages]
-    if: needs.resolve.outputs.release_mode == 'main'
     permissions:
       contents: write
-    uses: tinyhumansai/.github/.github/workflows/module-release.yml@1e28317c435a9c714002199e65d18a1067fa5777
+    uses: tinyhumansai/.github/.github/workflows/module-release.yml@4adc1080fb495098e7af1aade82ed7e6e3c69bb7
     with:
       tag: ${{ needs.resolve.outputs.tag }}
       version: ${{ needs.resolve.outputs.version }}
       module-crate: tinydocs-module
       extra-packaged-files: '["docs/specs/tinybus-module.md"]'
       source-artifact: source-packages
-  module-reviewed-epic-release:
-    needs: resolve
-    if: needs.resolve.outputs.release_mode == 'reviewed-epic'
-    permissions:
-      contents: write
-      pull-requests: read
-      checks: read
-      actions: read
-    uses: tinyhumansai/.github/.github/workflows/module-reviewed-epic-release.yml@1e28317c435a9c714002199e65d18a1067fa5777
-    with:
-      tag: ${{ needs.resolve.outputs.tag }}
-      version: ${{ needs.resolve.outputs.version }}
-      reviewed-pr: ${{ fromJSON(needs.resolve.outputs.reviewed_pr || '0') }}
