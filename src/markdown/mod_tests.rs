@@ -19,18 +19,27 @@ fn package(parts: &[(&str, &str)]) -> Vec<u8> {
     buffer.into_inner()
 }
 
-fn invalid_utf8_member_name(mut bytes: Vec<u8>) -> Vec<u8> {
-    let local_flags = u16::from_le_bytes([bytes[6], bytes[7]]) | (1 << 11);
-    bytes[6..8].copy_from_slice(&local_flags.to_le_bytes());
-    bytes[30] = 0xff;
+fn invalid_utf8_member_name(mut bytes: Vec<u8>, member: &str) -> Vec<u8> {
+    let mut positions = bytes
+        .windows(member.len())
+        .enumerate()
+        .filter_map(|(index, window)| (window == member.as_bytes()).then_some(index));
+    let local_name = positions.next().unwrap();
+    let central_name = positions.next().unwrap();
+    assert!(positions.next().is_none());
 
-    let central = bytes
-        .windows(4)
-        .position(|window| window == b"PK\x01\x02")
-        .unwrap();
+    // Keep the Office path prefix intact so the malformed member is still
+    // recognizably a slide, then corrupt its final name byte in both headers.
+    bytes[local_name + member.len() - 1] = 0xff;
+    bytes[central_name + member.len() - 1] = 0xff;
+    let local_header = local_name - 30;
+    let local_flags =
+        u16::from_le_bytes([bytes[local_header + 6], bytes[local_header + 7]]) | (1 << 11);
+    bytes[local_header + 6..local_header + 8].copy_from_slice(&local_flags.to_le_bytes());
+
+    let central = central_name - 46;
     let central_flags = u16::from_le_bytes([bytes[central + 8], bytes[central + 9]]) | (1 << 11);
     bytes[central + 8..central + 10].copy_from_slice(&central_flags.to_le_bytes());
-    bytes[central + 46] = 0xff;
     bytes
 }
 
@@ -214,17 +223,28 @@ fn a_deck_reads_its_slides_in_numeric_order() {
 }
 
 #[test]
-fn cp437_fallback_does_not_mistake_a_non_utf8_name_for_a_pptx_slide() {
-    let bytes = invalid_utf8_member_name(package(&[(
+fn pptx_reports_malformed_utf8_slide_names_instead_of_dropping_slides() {
+    let bytes = invalid_utf8_member_name(
+        pptx(&[(1, "malformed"), (2, "visible")]),
         "ppt/slides/slide1.xml",
-        "<a:p xmlns:a='a'><a:r><a:t>visible</a:t></a:r></a:p>",
-    )]));
+    );
+    let error = convert("presentation.pptx", &bytes).unwrap_err();
+    assert!(error.to_string().contains("invalid member name"), "{error}");
+}
 
-    let Error::ExtractionFailed { detail } = convert("presentation.pptx", &bytes).unwrap_err()
-    else {
-        panic!("unexpected error type");
-    };
-    assert_eq!(detail, "converting Pptx produced no text");
+#[test]
+fn pptx_skips_an_invalid_unrelated_member_and_keeps_valid_slides() {
+    let bytes = invalid_utf8_member_name(
+        package(&[
+            ("docProps/core.xml", "<metadata>ignored</metadata>"),
+            (
+                "ppt/slides/slide1.xml",
+                "<a:p xmlns:a='a'><a:r><a:t>visible</a:t></a:r></a:p>",
+            ),
+        ]),
+        "docProps/core.xml",
+    );
+    assert_eq!(convert("presentation.pptx", &bytes).unwrap(), "visible");
 }
 
 #[test]

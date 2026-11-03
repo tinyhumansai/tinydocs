@@ -64,21 +64,29 @@ fn archive(parts: &[(&str, &str)]) -> Vec<u8> {
     zip.finish().unwrap().into_inner()
 }
 
-fn invalid_utf8_member_name(bytes: &[u8]) -> Vec<u8> {
-    let mut malformed = bytes.to_vec();
-    let local_flags = u16::from_le_bytes([malformed[6], malformed[7]]) | (1 << 11);
-    malformed[6..8].copy_from_slice(&local_flags.to_le_bytes());
-    malformed[30] = 0xff;
+fn invalid_utf8_member_name(mut bytes: Vec<u8>) -> Vec<u8> {
+    let local_flags = u16::from_le_bytes([bytes[6], bytes[7]]) | (1 << 11);
+    bytes[6..8].copy_from_slice(&local_flags.to_le_bytes());
+    bytes[30] = 0xff;
 
-    let central = malformed
+    let central = bytes
         .windows(4)
         .position(|window| window == b"PK\x01\x02")
-        .expect("fixture contains a central-directory entry");
-    let central_flags =
-        u16::from_le_bytes([malformed[central + 8], malformed[central + 9]]) | (1 << 11);
-    malformed[central + 8..central + 10].copy_from_slice(&central_flags.to_le_bytes());
-    malformed[central + 46] = 0xff;
-    malformed
+        .unwrap();
+    let central_flags = u16::from_le_bytes([bytes[central + 8], bytes[central + 9]]) | (1 << 11);
+    bytes[central + 8..central + 10].copy_from_slice(&central_flags.to_le_bytes());
+    bytes[central + 46] = 0xff;
+    bytes
+}
+
+#[test]
+fn rejects_a_docx_whose_document_part_name_is_invalid_utf8() {
+    let bytes = invalid_utf8_member_name(archive(&[(
+        "word/document.xml",
+        "<w:document><w:p><w:t>unreadable</w:t></w:p></w:document>",
+    )]));
+    let error = extract(&bytes, &ExtractDocumentSpec::new(DocumentFormat::Docx)).unwrap_err();
+    assert!(error.to_string().contains("no supported parts"), "{error}");
 }
 #[test]
 fn extracts_docx_visible_text_and_provenance() {
@@ -89,21 +97,6 @@ fn extracts_docx_visible_text_and_provenance() {
     let result = extract(&bytes, &ExtractDocumentSpec::new(DocumentFormat::Docx)).unwrap();
     assert_eq!(result.sections[0].source, "word/document.xml");
     assert!(result.sections[0].text.contains("Hello & world"));
-}
-
-#[test]
-fn cp437_fallback_does_not_mistake_a_non_utf8_name_for_a_docx_part() {
-    let bytes = invalid_utf8_member_name(&archive(&[(
-        "word/document.xml",
-        "<w:document xmlns:w='w'><w:p><w:r><w:t>visible</w:t></w:r></w:p></w:document>",
-    )]));
-
-    let error = extract(&bytes, &ExtractDocumentSpec::new(DocumentFormat::Docx)).unwrap_err();
-
-    let Error::ExtractionFailed { detail } = error else {
-        panic!("unexpected error type");
-    };
-    assert_eq!(detail, "document has no supported parts");
 }
 #[test]
 fn truncates_text_without_splitting_unicode() {

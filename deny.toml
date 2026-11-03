@@ -19,20 +19,6 @@ all-features = true
 # process with an uncatchable SIGABRT) is *fixed*, not ignored: pdf-extract is
 # pinned to 0.12, which resolves lopdf 0.42.0.
 ignore = [
-    # yaml-rust, via ppt-rs -> pdfrs -> syntect. A YAML parser behind a syntax
-    # highlighter behind a PDF exporter — three layers from anything this crate
-    # calls, and `.pptx` synthesis never reaches it.
-    #
-    # Plan: it leaves with one line. ppt-rs's `pdf-native` default feature is
-    # what pulls `pdfrs`, but ppt-rs 0.3.0 does not compile with default
-    # features off — `src/export/slide_render.rs` has an unguarded
-    # `use pdfrs::...`. The moment that cfg is fixed upstream,
-    # `default-features = false` drops this crate, `syntect`, `bincode` and
-    # `pulldown-cmark` together. Verified locally: the resolve succeeds and the
-    # advisories clear; only ppt-rs's own build fails.
-    "RUSTSEC-2024-0320",
-    # bincode, via ppt-rs -> pdfrs -> syntect. Same subtree, same one-line fix.
-    "RUSTSEC-2025-0141",
     # ttf-parser, via pdf-extract -> lopdf. lopdf's font parser, so it is on the
     # extraction path rather than an unused corner — but the advisory is the
     # author declaring the crate finished, not a defect. No alternative without
@@ -52,11 +38,11 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "BSD-2-Clause",
     "BSD-3-Clause",
-    # The upstream BZip2 license is permissive and compatible with the crate's
-    # GPL-3.0-only license; ZIP 9 enables it through ppt-rs defaults.
+    # ZIP 9's Rust-native bzip2 implementation uses the upstream bzip2 license.
     "bzip2-1.0.6",
-    # constant_time_eq 0.6 and ppmd-rust declare permissive OR alternatives;
-    # allowing these options is needed for the ZIP 9 dependency graph.
+    # constant_time_eq 0.1.5, via ppt-rs -> zip 0.6.6. A public-domain
+    # dedication — strictly more permissive than the rest of this list, and it
+    # imposes no obligation on a GPL-3.0-only crate.
     "CC0-1.0",
     "GPL-3.0-only",
     "ISC",

@@ -124,7 +124,7 @@ fn office_parts(
             return Err(Error::extraction_failed("ZIP member name limit exceeded"));
         }
         let selected = match format {
-            DocumentFormat::Docx => name == "word/document.xml",
+            DocumentFormat::Docx => name.as_ref() == "word/document.xml",
             DocumentFormat::Pptx | DocumentFormat::Xlsx => true,
             DocumentFormat::Pdf => false,
         };
