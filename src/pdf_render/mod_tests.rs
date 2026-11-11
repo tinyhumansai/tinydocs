@@ -33,7 +33,7 @@ fn renders_only_requested_pages_in_order_with_png_dimensions() {
     assert_eq!(images.pages[1].page, 1);
     let decoder = png::Decoder::new(std::io::Cursor::new(&images.pages[0].bytes));
     let mut reader = decoder.read_info().unwrap();
-    let mut pixels = vec![0; reader.output_buffer_size()];
+    let mut pixels = vec![0; reader.output_buffer_size().unwrap()];
     let frame = reader.next_frame(&mut pixels).unwrap();
     assert!(
         pixels[..frame.buffer_size()]
