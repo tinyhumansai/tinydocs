@@ -454,7 +454,9 @@ fn a_nested_archive_never_yields_its_text_when_the_primary_directory_is_invalid(
     let size = u32::from_le_bytes(bytes[end + 12..end + 16].try_into().unwrap()) as usize;
     let central = end - size;
     bytes[central + 10..central + 12].copy_from_slice(&99u16.to_le_bytes());
-    if let Ok(markdown) = convert("nested.docx", &bytes) {
-        assert!(!markdown.contains("nested secret"), "{markdown}");
-    }
+    // The record belongs to a member DOCX never reads, so the outer document
+    // converts; the nested archive must never be read in its place.
+    let markdown = convert("nested.docx", &bytes).unwrap();
+    assert!(markdown.contains("outer"), "{markdown}");
+    assert!(!markdown.contains("nested secret"), "{markdown}");
 }
