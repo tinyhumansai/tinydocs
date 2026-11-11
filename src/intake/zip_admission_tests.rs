@@ -206,7 +206,10 @@ fn payload_footer_cannot_be_retried_when_primary_directory_is_invalid() {
     // DOCX never reads; either way only the outer document may be read.
     if let Ok(document) = extract_docx(&corrupt) {
         assert!(
-            document.sections.iter().all(|s| !s.text.contains("unchecked")),
+            document
+                .sections
+                .iter()
+                .all(|s| !s.text.contains("unchecked")),
             "{:?}",
             document.sections
         );

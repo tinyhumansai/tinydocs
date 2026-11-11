@@ -142,7 +142,9 @@ fn xml_text(xml: &str, paragraph_tag: &str, text_tag: &str) -> String {
             Ok(Event::GeneralRef(reference)) if in_text => {
                 if let Ok(Some(ch)) = reference.resolve_char_ref() {
                     out.push(ch);
-                } else if let Some(entity) = quick_xml::escape::resolve_predefined_entity(&reference) {
+                } else if let Some(entity) =
+                    quick_xml::escape::resolve_predefined_entity(&reference)
+                {
                     out.push_str(entity);
                 }
             }
