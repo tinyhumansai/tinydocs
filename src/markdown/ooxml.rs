@@ -1,7 +1,7 @@
 //! Word documents and `PowerPoint` decks: zip archives of XML, walked directly.
 
 use std::fmt::Display;
-use std::io::{Cursor, Read, Seek};
+use std::io::{Read, Seek};
 use std::str;
 
 use quick_xml::events::Event;
@@ -9,6 +9,7 @@ use zip::ZipArchive;
 
 use super::{MAX_DECOMPRESSED_BYTES, unreadable};
 use crate::Result;
+use crate::intake::{MAX_PART, admitted_archive};
 
 // ZIP general-purpose bit 11 marks UTF-8 names. Inspect it through zip's
 // stable flags value instead of naming its unstable flag enum.
@@ -59,14 +60,17 @@ pub(super) fn pptx(bytes: &[u8]) -> Result<String> {
     Ok(read_parts(&mut archive, &names, "a:p", "a:t"))
 }
 
-/// Opens an Office archive, refusing one whose declared expansion exceeds
+/// Opens an Office archive through intake's ZIP admission, refusing one with
+/// a part declared over [`MAX_PART`] or a declared expansion over
 /// [`MAX_DECOMPRESSED_BYTES`] before any entry data is read.
 ///
 /// `noun` names the document in the refusal ("the spreadsheet expands…").
-pub(super) fn open<'a>(bytes: &'a [u8], noun: &str) -> Result<ZipArchive<Cursor<&'a [u8]>>> {
-    let mut archive = ZipArchive::new(Cursor::new(bytes))
+pub(super) fn open<'a>(bytes: &'a [u8], noun: &str) -> Result<ZipArchive<impl Read + Seek + 'a>> {
+    let mut archive = admitted_archive(bytes)
         .map_err(|error| unreadable(&format!("the {noun} is not a readable archive: {error}")))?;
-    if declared_uncompressed(&mut archive).is_none_or(|total| total > MAX_DECOMPRESSED_BYTES) {
+    if declared_sizes(&mut archive)
+        .is_none_or(|(largest, total)| largest > MAX_PART || total > MAX_DECOMPRESSED_BYTES)
+    {
         return Err(unreadable(&format!(
             "the {noun} expands beyond the size this build can read safely"
         )));
@@ -74,15 +78,16 @@ pub(super) fn open<'a>(bytes: &'a [u8], noun: &str) -> Result<ZipArchive<Cursor<
     Ok(archive)
 }
 
-/// Sums the uncompressed sizes every entry declares, touching only the
-/// central directory — so this stays cheap however far the archive expands.
-/// `None` means an entry could not be inspected, which callers refuse.
-fn declared_uncompressed<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Option<u64> {
-    (0..archive.len()).try_fold(0u64, |total, index| {
+/// The largest and the summed uncompressed sizes the entries declare,
+/// touching only the central directory — so this stays cheap however far the
+/// archive expands. `None` means an entry could not be inspected, which
+/// callers refuse.
+fn declared_sizes<R: Read + Seek>(archive: &mut ZipArchive<R>) -> Option<(u64, u64)> {
+    (0..archive.len()).try_fold((0u64, 0u64), |(largest, total), index| {
         archive
             .by_index_data(index)
             .ok()
-            .map(|file| total.saturating_add(file.size()))
+            .map(|file| (largest.max(file.size()), total.saturating_add(file.size())))
     })
 }
 
@@ -109,11 +114,7 @@ fn read_parts<R: Read + Seek>(
         // Capped as well as pre-checked: an archive that declares small sizes
         // but streams more cannot force an unbounded allocation either.
         let mut xml = String::new();
-        if file
-            .take(MAX_DECOMPRESSED_BYTES)
-            .read_to_string(&mut xml)
-            .is_err()
-        {
+        if file.take(MAX_PART).read_to_string(&mut xml).is_err() {
             continue;
         }
         out.push_str(&xml_text(&xml, paragraph_tag, text_tag));

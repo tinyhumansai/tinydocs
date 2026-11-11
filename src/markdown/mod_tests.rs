@@ -407,3 +407,56 @@ fn a_readable_archive_without_a_workbook_is_an_extraction_error() {
     let bytes = package(&[("unrelated.xml", "<document/>")]);
     assert!(refusal("not-a-workbook.xlsx", &bytes).contains("could not be read"));
 }
+
+#[test]
+fn a_part_over_intakes_member_cap_is_refused() {
+    // Compresses to a few KiB but declares 12 MiB, past intake's 8 MiB member
+    // cap though under the 64 MiB aggregate one.
+    let text = format!("<w:t>{}</w:t>", "a".repeat(12 * 1024 * 1024));
+    let bytes = package(&[("word/document.xml", &text)]);
+    let reason = refusal("big-part.docx", &bytes);
+    assert!(reason.contains("expands"), "{reason}");
+}
+
+#[test]
+fn an_archive_over_intakes_member_count_is_refused() {
+    let names: Vec<String> = (0..3000).map(|i| format!("pad/{i}.xml")).collect();
+    let mut parts: Vec<(&str, &str)> = names.iter().map(|name| (name.as_str(), "<p/>")).collect();
+    parts.push(("word/document.xml", "<w:p><w:r><w:t>many</w:t></w:r></w:p>"));
+    let reason = refusal("many.docx", &package(&parts));
+    assert!(reason.contains("admission count limit"), "{reason}");
+}
+
+#[test]
+fn a_nested_archive_never_yields_its_text_when_the_primary_directory_is_invalid() {
+    let inner = package(&[(
+        "word/document.xml",
+        "<w:p><w:r><w:t>nested secret</w:t></w:r></w:p>",
+    )]);
+    let mut buffer = std::io::Cursor::new(Vec::new());
+    let mut writer = zip::ZipWriter::new(&mut buffer);
+    writer
+        .start_file("nested.zip", zip::write::SimpleFileOptions::default())
+        .unwrap();
+    std::io::Write::write_all(&mut writer, &inner).unwrap();
+    writer
+        .start_file(
+            "word/document.xml",
+            zip::write::SimpleFileOptions::default(),
+        )
+        .unwrap();
+    std::io::Write::write_all(&mut writer, b"<w:p><w:r><w:t>outer</w:t></w:r></w:p>").unwrap();
+    writer.finish().unwrap();
+    let mut bytes = buffer.into_inner();
+    // Give the primary directory's first record an unknown method (99), so a
+    // lenient reader is tempted to fall back to the nested archive's footer.
+    let end = bytes.len() - 22;
+    let size = u32::from_le_bytes(bytes[end + 12..end + 16].try_into().unwrap()) as usize;
+    let central = end - size;
+    bytes[central + 10..central + 12].copy_from_slice(&99u16.to_le_bytes());
+    // The record belongs to a member DOCX never reads, so the outer document
+    // converts; the nested archive must never be read in its place.
+    let markdown = convert("nested.docx", &bytes).unwrap();
+    assert!(markdown.contains("outer"), "{markdown}");
+    assert!(!markdown.contains("nested secret"), "{markdown}");
+}
