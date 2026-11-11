@@ -145,7 +145,7 @@ fn elements(
         match event {
             Event::Start(element) | Event::Empty(element) => {
                 let local = element.local_name();
-                let name = std::str::from_utf8(local.as_ref()).map_err(failed)?;
+                let name = local.as_ref();
                 if name.len() > 256 || parents.len() >= 128 {
                     return Err(invalid("XML nesting or name limit exceeded"));
                 }
@@ -160,14 +160,9 @@ fn elements(
                         return Err(invalid("XML metadata limit exceeded"));
                     }
                     attrs.push((
-                        std::str::from_utf8(attribute.key.as_ref())
-                            .map_err(failed)?
-                            .to_owned(),
+                        attribute.key.as_ref().to_owned(),
                         attribute
-                            .decoded_and_normalized_value(
-                                quick_xml::XmlVersion::Implicit1_0,
-                                reader.decoder(),
-                            )
+                            .normalized_value(quick_xml::XmlVersion::Implicit1_0)
                             .map_err(failed)?
                             .into_owned(),
                     ));

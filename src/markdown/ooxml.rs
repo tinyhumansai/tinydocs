@@ -130,23 +130,21 @@ fn xml_text(xml: &str, paragraph_tag: &str, text_tag: &str) -> String {
     let mut in_text = false;
     loop {
         match reader.read_event() {
-            Ok(Event::Start(tag)) if tag.name().as_ref() == text_tag.as_bytes() => in_text = true,
-            Ok(Event::End(tag)) if tag.name().as_ref() == text_tag.as_bytes() => in_text = false,
-            Ok(Event::End(tag)) if tag.name().as_ref() == paragraph_tag.as_bytes() => {
+            Ok(Event::Start(tag)) if tag.name().as_ref() == text_tag => in_text = true,
+            Ok(Event::End(tag)) if tag.name().as_ref() == text_tag => in_text = false,
+            Ok(Event::End(tag)) if tag.name().as_ref() == paragraph_tag => {
                 out.push_str("\n\n");
             }
             Ok(Event::Text(text)) if in_text => {
-                out.push_str(&text.decode().unwrap_or_default());
+                out.push_str(&text);
             }
             // The parser reports each `&amp;` / `&#38;` as its own event;
             // dropping them would turn "Q&A" into "QA".
             Ok(Event::GeneralRef(reference)) if in_text => {
                 if let Ok(Some(ch)) = reference.resolve_char_ref() {
                     out.push(ch);
-                } else if let Some(entity) = reference
-                    .decode()
-                    .ok()
-                    .and_then(|name| quick_xml::escape::resolve_predefined_entity(&name))
+                } else if let Some(entity) =
+                    quick_xml::escape::resolve_predefined_entity(&reference)
                 {
                     out.push_str(entity);
                 }
