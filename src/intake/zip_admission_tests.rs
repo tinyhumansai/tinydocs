@@ -183,7 +183,9 @@ fn central_directory_metadata_and_zip64_extensions_have_fixed_caps() {
 
 #[test]
 fn payload_footer_cannot_be_retried_when_primary_directory_is_invalid() {
-    let nested = fixture(&[("nested.xml", b"<t>unchecked</t>")]);
+    // The nested archive is itself a readable DOCX, so a fallback to its
+    // footer would surface its text rather than merely fail.
+    let nested = fixture(&[("word/document.xml", b"<t>unchecked</t>")]);
     let bytes = fixture(&[
         ("nested.zip", &nested),
         ("word/document.xml", b"<t>visible</t>"),
@@ -200,7 +202,15 @@ fn payload_footer_cannot_be_retried_when_primary_directory_is_invalid() {
     // footers; the embedded ZIP must not become a second admission candidate.
     corrupt[central + 10..central + 12].copy_from_slice(&99u16.to_le_bytes());
     zip_preflight(&corrupt).unwrap();
-    assert!(extract_docx(&corrupt).is_err());
+    // zip 9.0 refuses the corrupt record and zip 9.2 tolerates it on a member
+    // DOCX never reads; either way only the outer document may be read.
+    if let Ok(document) = extract_docx(&corrupt) {
+        assert!(
+            document.sections.iter().all(|s| !s.text.contains("unchecked")),
+            "{:?}",
+            document.sections
+        );
+    }
 }
 
 #[test]
