@@ -55,7 +55,7 @@ Fixture tests verify ordered Office sections, shared/inline/cached worksheet
 values, mixed text/scanned PDFs, raster pixels and PNG dimensions, truncation,
 malformed XML, hostile ZIP metadata, and all documented budget rejections.
 Bus tests verify schema validation, streamed input, held output reads/releases,
-and rollback when a rendering output cannot be retained. MSRV is Rust 1.88.
+and rollback when a rendering output cannot be retained. MSRV is Rust 1.92 (hayro 0.6 needs it).
 
 ## Open questions
 
