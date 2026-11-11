@@ -14,7 +14,7 @@ pub use tinydocs_bus::intake::{
 
 const MAX_INPUT: usize = 64 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 32 * 1024 * 1024;
-const MAX_PART: u64 = 8 * 1024 * 1024;
+pub(crate) const MAX_PART: u64 = 8 * 1024 * 1024;
 const MAX_ENTRIES: usize = 2048;
 const MAX_SHARED_STRINGS: usize = 65_536;
 const MAX_SHARED_TEXT_BYTES: usize = 4 * 1024 * 1024;
@@ -45,6 +45,16 @@ pub fn extract(bytes: &[u8], spec: &ExtractDocumentSpec) -> Result<ExtractedDocu
         return extract_pdf(bytes, spec);
     }
     extract_office(bytes, spec)
+}
+/// Opens an Office archive through the same bounded central-directory
+/// admission as [`extract`], so other readers of untrusted archives cannot
+/// fall back to an unadmitted directory either.
+#[cfg(feature = "markdown")]
+pub(crate) fn admitted_archive(
+    bytes: &[u8],
+) -> Result<zip::ZipArchive<impl std::io::Read + std::io::Seek + '_>> {
+    zip_admission::zip_preflight(bytes)?;
+    zip_admission::open_admitted_zip(bytes)
 }
 fn extract_office(bytes: &[u8], spec: &ExtractDocumentSpec) -> Result<ExtractedDocument> {
     zip_admission::zip_preflight(bytes)?;

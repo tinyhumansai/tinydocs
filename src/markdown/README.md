@@ -6,8 +6,12 @@ retains TinyMemory OfficeConverter semantics, including form-feed PDF page
 boundaries, numeric slide order, and `sheet | cell | cell` spreadsheet rows.
 The implementation is adapted from TinyMemory under GPL-3.0-only.
 
-Input is limited to 32 MiB. Office archives are admitted only when their
-aggregate declared expansion is at most 64 MiB; spreadsheet ranges are checked
+Input is limited to 32 MiB. Office archives first pass the same bounded ZIP
+admission as [intake](../intake/README.md) (member count, central-directory
+size, names, no fallback to embedded footers), then are admitted only when no
+member declares more than 8 MiB and their aggregate declared expansion is at
+most 64 MiB. Encrypted members are skipped rather than refused, so a deck with
+encrypted notes still yields its slides. Spreadsheet ranges are checked
 with a sparse scan before allocating a dense grid of at most one million
 cells. An entirely empty or scanned document returns `ExtractionFailed`.
 
