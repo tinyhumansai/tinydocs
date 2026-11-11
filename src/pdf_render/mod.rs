@@ -86,6 +86,8 @@ pub fn render(bytes: &[u8], spec: &RenderPdfSpec) -> Result<PdfImages> {
         pages: Vec::new(),
     };
     let mut total_bytes = 0u64;
+    // One cache per document, reused across its pages, as hayro recommends.
+    let cache = hayro::RenderCache::new();
     for (number, width, height, scale) in plans {
         let page = &pdf.pages()[(number - 1) as usize];
         let settings = hayro::RenderSettings {
@@ -95,7 +97,7 @@ pub fn render(bytes: &[u8], spec: &RenderPdfSpec) -> Result<PdfImages> {
             y_scale: scale,
             bg_color: WHITE,
         };
-        let pixmap = hayro::render(page, &InterpreterSettings::default(), &settings);
+        let pixmap = hayro::render(page, &cache, &InterpreterSettings::default(), &settings);
         let bytes = pixmap.into_png().map_err(failed)?;
         total_bytes = total_bytes
             .checked_add(bytes.len() as u64)

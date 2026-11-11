@@ -41,7 +41,7 @@ Run from the TinyDocs repository root:
 cargo fmt --all -- --check
 cargo test --workspace --all-features
 cargo clippy --workspace --all-targets --all-features -- -D warnings
-cargo +1.88.0 check --workspace --all-features
+cargo +1.92.0 check --workspace --all-features
 cargo deny --all-features check all
 ```
 

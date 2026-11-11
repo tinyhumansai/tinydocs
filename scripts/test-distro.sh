@@ -70,7 +70,7 @@ docker run --rm \
       exit 1
     }
     chmod +x "$installer"
-    "$installer" -y --profile minimal --default-toolchain 1.88.0 --no-modify-path
+    "$installer" -y --profile minimal --default-toolchain 1.92.0 --no-modify-path
     rm -f "$installer"
     source "$HOME/.cargo/env"
     actual_target="$(rustc -vV | sed -n "s/^host: //p")"

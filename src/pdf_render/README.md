@@ -23,5 +23,5 @@ or renderer resources. A blocking-pool timeout is not cancellation. The host
 owns execution deadlines and any stronger process isolation. No network OCR
 or remote inference happens here.
 
-Hayro 0.5 and the resolved extraction/render dependency graph compile and test
-on the declared Rust 1.88 MSRV.
+Hayro 0.6 and the resolved extraction/render dependency graph compile and test
+on the declared Rust 1.92 MSRV; hayro 0.6's vello 0.0.7 needs 1.92.

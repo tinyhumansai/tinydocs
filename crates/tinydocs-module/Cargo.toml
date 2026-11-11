@@ -2,7 +2,7 @@
 name = "tinydocs-module"
 version.workspace = true
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.92"
 license = "GPL-3.0-only"
 description = "Trusted TinyBus module adapter for TinyDocs."
 repository = "https://github.com/tinyhumansai/tinydocs"
