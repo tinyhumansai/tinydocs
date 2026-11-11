@@ -202,18 +202,11 @@ fn payload_footer_cannot_be_retried_when_primary_directory_is_invalid() {
     // footers; the embedded ZIP must not become a second admission candidate.
     corrupt[central + 10..central + 12].copy_from_slice(&99u16.to_le_bytes());
     zip_preflight(&corrupt).unwrap();
-    // zip 9.0 refuses the corrupt record and zip 9.2 tolerates it on a member
-    // DOCX never reads; either way only the outer document may be read.
-    if let Ok(document) = extract_docx(&corrupt) {
-        assert!(
-            document
-                .sections
-                .iter()
-                .all(|s| !s.text.contains("unchecked")),
-            "{:?}",
-            document.sections
-        );
-    }
+    // zip 9.2 tolerates the corrupt record on a member DOCX never reads, so
+    // the outer document is extracted; the nested one must never be read.
+    let document = extract_docx(&corrupt).unwrap();
+    assert_eq!(document.sections.len(), 1, "{:?}", document.sections);
+    assert_eq!(document.sections[0].text, "visible");
 }
 
 #[test]
