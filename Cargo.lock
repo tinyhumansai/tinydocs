@@ -1725,7 +1725,7 @@ name = "tinydocs-client"
 version = "0.2.8"
 dependencies = [
  "async-trait",
- "base64 0.22.1",
+ "base64 0.23.1",
  "serde_json",
  "sha2 0.10.9",
  "tinybus",
