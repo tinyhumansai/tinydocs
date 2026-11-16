@@ -18,7 +18,7 @@ tinybus = { version = "0.3.11", default-features = false }
 tinydocs-bus = { version = "0.2.5", path = "../tinydocs-bus" }
 # The held-output protocol uses base64 chunks and verifies their SHA-256 digest.
 base64 = "0.22"
-sha2 = "0.10"
+sha2 = "0.11"
 serde_json = "1"
 # Cancellation-safe output release schedules cleanup on the caller's runtime.
 tokio = { version = "1", features = ["rt", "time"] }
